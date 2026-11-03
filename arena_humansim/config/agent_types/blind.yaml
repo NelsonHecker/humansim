@@ -1,0 +1,7 @@
+# A pedestrian completely blind/oblivious to robots.
+# Normal human-to-human social navigation remains 100% active.
+name: blind
+extends: adult
+perception:
+  robot_awareness: 0.0
+  robot_repulsion_gain: 0.0

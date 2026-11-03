@@ -1,0 +1,6 @@
+# A cautious pedestrian with strong repulsion toward robots, yielding early and giving wide berth.
+name: scared
+extends: adult
+perception:
+  robot_awareness: 1.0
+  robot_repulsion_gain: 2.0

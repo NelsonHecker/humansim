@@ -376,6 +376,10 @@ def _orca_kernel(
     wall_clearance: float,
     inv_dt: float,
     out: np.ndarray,
+    kind: np.ndarray | None = None,
+    robot_awareness: np.ndarray | None = None,
+    robot_repulsion_gain: np.ndarray | None = None,
+    vision_range: np.ndarray | None = None,
 ) -> None:
     n = pos.shape[0]
     n_walls = edges.shape[0] // 2
@@ -452,8 +456,19 @@ def _orca_kernel(
                 break
             if j == i:
                 continue
+            combined_r = ra + radius[j]
+            if kind is not None and robot_awareness is not None and robot_repulsion_gain is not None and vision_range is not None:
+                if kind[j] == 1 and kind[i] != 1:
+                    if robot_awareness[i] <= 0.0:
+                        continue
+                    dx = pos[j, 0] - x
+                    dy = pos[j, 1] - y
+                    eff_vr = vision_range[i] * robot_awareness[i]
+                    if dx * dx + dy * dy > eff_vr * eff_vr:
+                        continue
+                    combined_r = ra + radius[j] * robot_repulsion_gain[i]
             n_found += 1
-            n_lines = _agent_line(lines, n_lines, pos[j, 0] - x, pos[j, 1] - y, vx - vel[j, 0], vy - vel[j, 1], vx, vy, ra + radius[j], inv_tau, inv_dt)
+            n_lines = _agent_line(lines, n_lines, pos[j, 0] - x, pos[j, 1] - y, vx - vel[j, 0], vy - vel[j, 1], vx, vy, combined_r, inv_tau, inv_dt)
 
         fail, rx, ry = _linear_program2(lines, n_lines, vmax, pref_x, pref_y, False)
         if fail < n_lines:
@@ -541,6 +556,10 @@ class ORCAPlanner(LocalPlanner):
             self.wall_clearance,
             1.0 / dt,
             out,
+            pool.kind[:n],
+            pool.robot_awareness[:n],
+            pool.robot_repulsion_gain[:n],
+            pool.vision_range[:n],
         )
         pool.vel[:n] = out
 

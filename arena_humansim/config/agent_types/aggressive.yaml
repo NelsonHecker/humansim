@@ -1,0 +1,6 @@
+# An assertive pedestrian who sees the robot clearly but minimizes yielding and cuts across.
+name: aggressive
+extends: adult
+perception:
+  robot_awareness: 1.0
+  robot_repulsion_gain: 0.4

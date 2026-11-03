@@ -13,6 +13,8 @@ if TYPE_CHECKING:
     from arena_humansim.occlusion import Occluder
     from arena_humansim.utils.types import AgentState, BeliefState, WorldState
 
+from arena_humansim.core.pool import KIND_ROBOT
+
 
 class DefaultPerception(Perception):
     supports_pool: bool = True
@@ -99,6 +101,40 @@ class DefaultPerception(Perception):
                 blocked = ~_clear_unordered(self._occluder, positions, r_los, c_los, n)
                 mask[r_los[blocked], c_los[blocked]] = False
 
+        # Gate robot perception by observer's robot_awareness
+        is_robot = pool.kind[:n] == KIND_ROBOT
+        if np.any(is_robot):
+            robot_cols = np.flatnonzero(is_robot)
+            human_rows = np.flatnonzero(~is_robot)
+            if len(human_rows) > 0 and len(robot_cols) > 0:
+                h_idx = human_rows[:, None]
+                r_idx = robot_cols[None, :]
+                awareness = pool.robot_awareness[human_rows, None]
+                blind_mask = awareness <= 0.0
+                mask[h_idx, r_idx] &= ~blind_mask
+
+                partial = (awareness > 0.0) & (awareness < 1.0)
+                if np.any(partial):
+                    p_rows, p_cols = np.nonzero(partial)
+                    orig_r = human_rows[p_rows]
+                    orig_c = robot_cols[p_cols]
+                    pair_dists = dists[orig_r, orig_c]
+                    eff_range = pool.vision_range[orig_r] * pool.robot_awareness[orig_r]
+                    eff_prox = pool.proximity_sense[orig_r] * pool.robot_awareness[orig_r]
+                    beyond = pair_dists > np.maximum(eff_range, eff_prox)
+                    mask[orig_r[beyond], orig_c[beyond]] = False
+
+                    surviving = ~beyond & (pair_dists > eff_prox)
+                    if np.any(surviving):
+                        sr_r = orig_r[surviving]
+                        sr_c = orig_c[surviving]
+                        eff_fov = pool.vision_fov[sr_r] * pool.robot_awareness[sr_r]
+                        cos_half = np.cos(np.radians(eff_fov * 0.5))
+                        heading = pool.theta[sr_r]
+                        dot = diff[sr_r, sr_c, 0] * np.cos(heading) + diff[sr_r, sr_c, 1] * np.sin(heading)
+                        outside_fov = dot < pair_dists[surviving] * cos_half
+                        mask[sr_r[outside_fov], sr_c[outside_fov]] = False
+
         row, col = np.where(mask)
         if len(row) == 0:
             pool.set_neighbor_csr(
@@ -160,6 +196,38 @@ class DefaultPerception(Perception):
                 blocked = ~_clear_unordered(self._occluder, positions, row[los_idx], col[los_idx], n)
                 keep[los_idx[blocked]] = False
 
+        # Gate robot perception by observer's robot_awareness
+        robot_nbr = (pool.kind[col] == KIND_ROBOT) & (pool.kind[row] != KIND_ROBOT)
+        if np.any(robot_nbr):
+            awareness = pool.robot_awareness[row[robot_nbr]]
+            robot_nbr_idx = np.flatnonzero(robot_nbr)
+            blind_idx = robot_nbr_idx[awareness <= 0.0]
+            keep[blind_idx] = False
+
+            partial_sub = (awareness > 0.0) & (awareness < 1.0)
+            if np.any(partial_sub):
+                partial_idx = robot_nbr_idx[partial_sub]
+                p_row = row[partial_idx]
+                p_col = col[partial_idx]
+                p_dist = dist[partial_idx]
+                eff_range = pool.vision_range[p_row] * pool.robot_awareness[p_row]
+                eff_prox = pool.proximity_sense[p_row] * pool.robot_awareness[p_row]
+                beyond = p_dist > np.maximum(eff_range, eff_prox)
+                keep[partial_idx[beyond]] = False
+
+                surviving = ~beyond & (p_dist > eff_prox)
+                if np.any(surviving):
+                    s_idx = partial_idx[surviving]
+                    s_row = p_row[surviving]
+                    s_col = p_col[surviving]
+                    eff_fov = pool.vision_fov[s_row] * pool.robot_awareness[s_row]
+                    cos_half = np.cos(np.radians(eff_fov * 0.5))
+                    heading = pool.theta[s_row]
+                    dx = positions[s_col, 0] - positions[s_row, 0]
+                    dy = positions[s_col, 1] - positions[s_row, 1]
+                    outside = dx * np.cos(heading) + dy * np.sin(heading) < p_dist[surviving] * cos_half
+                    keep[s_idx[outside]] = False
+
         row = row[keep]
         col = col[keep]
 
@@ -200,6 +268,7 @@ class DefaultPerception(Perception):
         omnidirectional = vision_fov >= 360.0
         half_fov = np.radians(vision_fov * 0.5)
         heading = observer.pose.theta
+        robot_awareness: float = getattr(agent.params.perception, "robot_awareness", 1.0)
 
         query_radius = max(vision_range, proximity_sense)
         neighbor_indices = self._shared_tree.query_ball_point([ox, oy], query_radius)
@@ -209,16 +278,23 @@ class DefaultPerception(Perception):
             nid = self._shared_ids[idx]
             if nid == agent_id:
                 continue
+            nbr_is_robot = getattr(all_agents[nid], "kind", 0) == KIND_ROBOT
+            if nbr_is_robot and robot_awareness <= 0.0:
+                continue
+            eff_range = vision_range * robot_awareness if nbr_is_robot else vision_range
+            eff_prox = proximity_sense * robot_awareness if nbr_is_robot else proximity_sense
+            eff_fov = vision_fov * robot_awareness if nbr_is_robot else vision_fov
+
             nx, ny = self._shared_positions[idx]
             d = float(np.hypot(nx - ox, ny - oy))
-            within_prox = d <= proximity_sense
+            within_prox = d <= eff_prox
             if not within_prox:
-                if d > vision_range:
+                if d > eff_range:
                     continue
-                if not omnidirectional:
+                if eff_fov < 360.0:
                     bearing = np.arctan2(ny - oy, nx - ox)
                     angle_diff = abs(_wrap_angle(bearing - heading))
-                    if angle_diff > half_fov:
+                    if angle_diff > np.radians(eff_fov * 0.5):
                         continue
             candidates.append(idx)
 

@@ -1,8 +1,10 @@
 import math
 from collections.abc import Callable, Sequence
+from typing import Any
 
 import numpy as np
 
+from arena_humansim.core.agents.types import AWARENESS_PRESETS
 from arena_humansim.utils.loggable import Loggable
 from arena_humansim.utils.rng import RNG, derive_seed
 from arena_humansim.utils.types import AgentLifetime, Pose2D, RateKeyframe, Shape, ShapeType, SinkConfig, SourceConfig, SourceType, SpawnRequest
@@ -162,6 +164,17 @@ class SpawnScheduler(Loggable):
             target_sink_name=target_sink_name,
         )
 
+        awareness_spec = tmpl.robot_awareness
+        repulsion_spec = tmpl.robot_repulsion_gain
+        if tmpl.robot_aware is not None:
+            awareness_spec = 1.0 if tmpl.robot_aware else 0.0
+            repulsion_spec = 1.0 if tmpl.robot_aware else 0.0
+
+        robot_awareness = sample_awareness_spec(awareness_spec, rng)
+        robot_repulsion_gain = sample_repulsion_gain_spec(repulsion_spec, rng)
+        if robot_repulsion_gain is None and isinstance(awareness_spec, str) and awareness_spec.strip().lower() in AWARENESS_PRESETS:
+            robot_repulsion_gain = AWARENESS_PRESETS[awareness_spec.strip().lower()][1]
+
         return SpawnRequest(
             pose=pose,
             desired_velocity=desired_velocity,
@@ -169,6 +182,8 @@ class SpawnScheduler(Loggable):
             agent_type=tmpl.agent_type,
             waypoints=waypoints,
             lifetime=lifetime,
+            robot_awareness=robot_awareness,
+            robot_repulsion_gain=robot_repulsion_gain,
         )
 
     def _sample_pose_in_shape(self, center: Pose2D, shape: Shape, rng: np.random.Generator | None = None) -> Pose2D:
@@ -226,3 +241,87 @@ class SpawnScheduler(Loggable):
         x = center.x + w * a.x + u * b.x + v * c.x
         y = center.y + w * a.y + u * b.y + v * c.y
         return Pose2D(x=x, y=y, theta=0.0)
+
+
+def sample_awareness_spec(spec: Any, rng: np.random.Generator) -> float | None:
+    """Sample continuous robot awareness in [0.0, 1.0] from a constant, preset, mixture, or distribution."""
+    if spec is None:
+        return None
+    if isinstance(spec, bool):
+        return 1.0 if spec else 0.0
+    if isinstance(spec, (int, float)):
+        return float(np.clip(spec, 0.0, 1.0))
+    if isinstance(spec, str):
+        key = spec.strip().lower()
+        if key in AWARENESS_PRESETS:
+            return AWARENESS_PRESETS[key][0]
+        try:
+            return float(np.clip(float(key), 0.0, 1.0))
+        except ValueError:
+            return 1.0
+    if isinstance(spec, list):
+        if not spec:
+            return None
+        weights = np.array([float(item.get("weight", 1.0)) for item in spec], dtype=np.float64)
+        weights /= weights.sum()
+        chosen = spec[int(rng.choice(len(spec), p=weights))]
+        val = chosen.get("value", chosen.get("preset"))
+        return sample_awareness_spec(val, rng)
+    if isinstance(spec, dict):
+        if "mean" in spec:
+            mean = float(spec["mean"])
+            std = float(spec.get("std", 0.0))
+            clip_low = float(spec.get("clip_low", 0.0))
+            clip_high = float(spec.get("clip_high", 1.0))
+            val = float(rng.normal(mean, std)) if std > 0.0 else mean
+            return float(np.clip(val, clip_low, clip_high))
+        if "mixture" in spec and isinstance(spec["mixture"], list):
+            return sample_awareness_spec(spec["mixture"], rng)
+        keys = list(spec.keys())
+        weights = np.array([float(spec[k]) for k in keys], dtype=np.float64)
+        weights /= weights.sum()
+        chosen = keys[int(rng.choice(len(keys), p=weights))]
+        return sample_awareness_spec(chosen, rng)
+    return None
+
+
+def sample_repulsion_gain_spec(spec: Any, rng: np.random.Generator) -> float | None:
+    """Sample robot repulsion gain from a constant, preset, mixture, or distribution."""
+    if spec is None:
+        return None
+    if isinstance(spec, bool):
+        return 1.0 if spec else 0.0
+    if isinstance(spec, (int, float)):
+        return max(0.0, float(spec))
+    if isinstance(spec, str):
+        key = spec.strip().lower()
+        if key in AWARENESS_PRESETS:
+            return AWARENESS_PRESETS[key][1]
+        try:
+            return max(0.0, float(key))
+        except ValueError:
+            return 1.0
+    if isinstance(spec, list):
+        if not spec:
+            return None
+        weights = np.array([float(item.get("weight", 1.0)) for item in spec], dtype=np.float64)
+        weights /= weights.sum()
+        chosen = spec[int(rng.choice(len(spec), p=weights))]
+        val = chosen.get("value", chosen.get("preset"))
+        return sample_repulsion_gain_spec(val, rng)
+    if isinstance(spec, dict):
+        if "mean" in spec:
+            mean = float(spec["mean"])
+            std = float(spec.get("std", 0.0))
+            clip_low = float(spec.get("clip_low", 0.0))
+            clip_high = float(spec.get("clip_high", float("inf")))
+            val = float(rng.normal(mean, std)) if std > 0.0 else mean
+            return max(0.0, float(np.clip(val, clip_low, clip_high)))
+        if "mixture" in spec and isinstance(spec["mixture"], list):
+            return sample_repulsion_gain_spec(spec["mixture"], rng)
+        keys = list(spec.keys())
+        weights = np.array([float(spec[k]) for k in keys], dtype=np.float64)
+        weights /= weights.sum()
+        chosen = keys[int(rng.choice(len(keys), p=weights))]
+        return sample_repulsion_gain_spec(chosen, rng)
+    return None
