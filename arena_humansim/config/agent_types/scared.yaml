@@ -4,3 +4,5 @@ extends: adult
 perception:
   robot_awareness: 1.0
   robot_repulsion_gain: 2.0
+  robot_fov_gain: 1.2
+  robot_reaction_gain: 0.7

@@ -114,7 +114,7 @@ class DefaultPerception(Perception):
                 mask[h_idx, r_idx] &= ~blind_mask
 
                 fov_gain = pool.robot_fov_gain[human_rows, None]
-                partial = ((awareness > 0.0) & (awareness < 1.0)) | (fov_gain < 1.0)
+                partial = ((awareness > 0.0) & (awareness < 1.0)) | (fov_gain != 1.0)
                 if np.any(partial):
                     p_rows, p_cols = np.nonzero(partial)
                     orig_r = human_rows[p_rows]
@@ -130,10 +130,11 @@ class DefaultPerception(Perception):
                         sr_r = orig_r[surviving]
                         sr_c = orig_c[surviving]
                         eff_fov = pool.vision_fov[sr_r] * pool.robot_fov_gain[sr_r]
-                        cos_half = np.cos(np.radians(eff_fov * 0.5))
+                        needs_fov_check = eff_fov < 360.0
+                        cos_half = np.cos(np.radians(np.clip(eff_fov, 0.0, 360.0) * 0.5))
                         heading = pool.theta[sr_r]
                         dot = diff[sr_r, sr_c, 0] * np.cos(heading) + diff[sr_r, sr_c, 1] * np.sin(heading)
-                        outside_fov = dot < pair_dists[surviving] * cos_half
+                        outside_fov = needs_fov_check & (dot < pair_dists[surviving] * cos_half)
                         mask[sr_r[outside_fov], sr_c[outside_fov]] = False
 
         row, col = np.where(mask)
@@ -206,7 +207,7 @@ class DefaultPerception(Perception):
             keep[blind_idx] = False
 
             fov_gain = pool.robot_fov_gain[row[robot_nbr]]
-            partial_sub = ((awareness > 0.0) & (awareness < 1.0)) | (fov_gain < 1.0)
+            partial_sub = ((awareness > 0.0) & (awareness < 1.0)) | (fov_gain != 1.0)
             if np.any(partial_sub):
                 partial_idx = robot_nbr_idx[partial_sub]
                 p_row = row[partial_idx]
@@ -223,11 +224,12 @@ class DefaultPerception(Perception):
                     s_row = p_row[surviving]
                     s_col = p_col[surviving]
                     eff_fov = pool.vision_fov[s_row] * pool.robot_fov_gain[s_row]
-                    cos_half = np.cos(np.radians(eff_fov * 0.5))
+                    needs_fov_check = eff_fov < 360.0
+                    cos_half = np.cos(np.radians(np.clip(eff_fov, 0.0, 360.0) * 0.5))
                     heading = pool.theta[s_row]
                     dx = positions[s_col, 0] - positions[s_row, 0]
                     dy = positions[s_col, 1] - positions[s_row, 1]
-                    outside = dx * np.cos(heading) + dy * np.sin(heading) < p_dist[surviving] * cos_half
+                    outside = needs_fov_check & (dx * np.cos(heading) + dy * np.sin(heading) < p_dist[surviving] * cos_half)
                     keep[s_idx[outside]] = False
 
         row = row[keep]

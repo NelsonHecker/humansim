@@ -314,6 +314,8 @@ class AgentTemplate:
     policy_params: str = ""
     robot_awareness: Any = None
     robot_repulsion_gain: Any = None
+    robot_fov_gain: Any = None
+    robot_reaction_gain: Any = None
     robot_aware: bool | None = None
 
 

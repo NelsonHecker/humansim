@@ -164,25 +164,34 @@ class SpawnScheduler(Loggable):
             target_sink_name=target_sink_name,
         )
 
+        preset_tuple = None
+        if tmpl.robot_aware is not None:
+            preset_tuple = AWARENESS_PRESETS["normal"] if tmpl.robot_aware else AWARENESS_PRESETS["blind"]
+
         awareness_spec = tmpl.robot_awareness
         repulsion_spec = tmpl.robot_repulsion_gain
-        if tmpl.robot_aware is not None:
-            awareness_spec = 1.0 if tmpl.robot_aware else 0.0
-            repulsion_spec = 1.0 if tmpl.robot_aware else 0.0
-
-        robot_awareness = sample_awareness_spec(awareness_spec, rng)
-        robot_repulsion_gain = sample_repulsion_gain_spec(repulsion_spec, rng)
-        robot_fov_gain = sample_awareness_spec(getattr(tmpl, "robot_fov_gain", None), rng)
-        robot_reaction_gain = sample_repulsion_gain_spec(getattr(tmpl, "robot_reaction_gain", None), rng)
+        fov_spec = getattr(tmpl, "robot_fov_gain", None)
+        reaction_spec = getattr(tmpl, "robot_reaction_gain", None)
 
         if isinstance(awareness_spec, str) and awareness_spec.strip().lower() in AWARENESS_PRESETS:
-            preset = AWARENESS_PRESETS[awareness_spec.strip().lower()]
-            if robot_repulsion_gain is None:
-                robot_repulsion_gain = preset[1]
-            if robot_fov_gain is None:
-                robot_fov_gain = preset[2]
-            if robot_reaction_gain is None:
-                robot_reaction_gain = preset[3]
+            preset_tuple = AWARENESS_PRESETS[awareness_spec.strip().lower()]
+            awareness_spec = preset_tuple[0]
+
+        robot_awareness = sample_awareness_spec(awareness_spec, rng)
+        if robot_awareness is None and preset_tuple is not None:
+            robot_awareness = preset_tuple[0]
+
+        robot_repulsion_gain = sample_repulsion_gain_spec(repulsion_spec, rng)
+        if robot_repulsion_gain is None and preset_tuple is not None:
+            robot_repulsion_gain = preset_tuple[1]
+
+        robot_fov_gain = sample_awareness_spec(fov_spec, rng)
+        if robot_fov_gain is None and preset_tuple is not None:
+            robot_fov_gain = preset_tuple[2]
+
+        robot_reaction_gain = sample_repulsion_gain_spec(reaction_spec, rng)
+        if robot_reaction_gain is None and preset_tuple is not None:
+            robot_reaction_gain = preset_tuple[3]
 
         return SpawnRequest(
             pose=pose,
@@ -269,14 +278,25 @@ def sample_awareness_spec(spec: Any, rng: np.random.Generator) -> float | None:
         try:
             return float(np.clip(float(key), 0.0, 1.0))
         except ValueError:
-            return 1.0
+            raise ValueError(f"Unknown awareness preset {spec!r}; valid presets: {', '.join(sorted(AWARENESS_PRESETS))}") from None
     if isinstance(spec, list):
         if not spec:
             return None
-        weights = np.array([float(item.get("weight", 1.0)) for item in spec], dtype=np.float64)
+        weights_list: list[float] = []
+        for item in spec:
+            if isinstance(item, dict):
+                weights_list.append(float(item.get("weight", 1.0)))
+            else:
+                weights_list.append(1.0)
+        weights = np.array(weights_list, dtype=np.float64)
+        if np.any(weights < 0.0) or weights.sum() <= 0.0:
+            raise ValueError(f"Mixture weights must be non-negative and sum > 0, got {weights}")
         weights /= weights.sum()
         chosen = spec[int(rng.choice(len(spec), p=weights))]
-        val = chosen.get("value", chosen.get("preset"))
+        if isinstance(chosen, dict):
+            val = chosen.get("value", chosen.get("preset"))
+        else:
+            val = chosen
         return sample_awareness_spec(val, rng)
     if isinstance(spec, dict):
         if "mean" in spec:
@@ -290,6 +310,8 @@ def sample_awareness_spec(spec: Any, rng: np.random.Generator) -> float | None:
             return sample_awareness_spec(spec["mixture"], rng)
         keys = list(spec.keys())
         weights = np.array([float(spec[k]) for k in keys], dtype=np.float64)
+        if np.any(weights < 0.0) or weights.sum() <= 0.0:
+            raise ValueError(f"Mixture weights must be non-negative and sum > 0, got {weights}")
         weights /= weights.sum()
         chosen = keys[int(rng.choice(len(keys), p=weights))]
         return sample_awareness_spec(chosen, rng)
@@ -311,14 +333,25 @@ def sample_repulsion_gain_spec(spec: Any, rng: np.random.Generator) -> float | N
         try:
             return max(0.0, float(key))
         except ValueError:
-            return 1.0
+            raise ValueError(f"Unknown repulsion preset {spec!r}; valid presets: {', '.join(sorted(AWARENESS_PRESETS))}") from None
     if isinstance(spec, list):
         if not spec:
             return None
-        weights = np.array([float(item.get("weight", 1.0)) for item in spec], dtype=np.float64)
+        weights_list: list[float] = []
+        for item in spec:
+            if isinstance(item, dict):
+                weights_list.append(float(item.get("weight", 1.0)))
+            else:
+                weights_list.append(1.0)
+        weights = np.array(weights_list, dtype=np.float64)
+        if np.any(weights < 0.0) or weights.sum() <= 0.0:
+            raise ValueError(f"Mixture weights must be non-negative and sum > 0, got {weights}")
         weights /= weights.sum()
         chosen = spec[int(rng.choice(len(spec), p=weights))]
-        val = chosen.get("value", chosen.get("preset"))
+        if isinstance(chosen, dict):
+            val = chosen.get("value", chosen.get("preset"))
+        else:
+            val = chosen
         return sample_repulsion_gain_spec(val, rng)
     if isinstance(spec, dict):
         if "mean" in spec:
@@ -332,6 +365,8 @@ def sample_repulsion_gain_spec(spec: Any, rng: np.random.Generator) -> float | N
             return sample_repulsion_gain_spec(spec["mixture"], rng)
         keys = list(spec.keys())
         weights = np.array([float(spec[k]) for k in keys], dtype=np.float64)
+        if np.any(weights < 0.0) or weights.sum() <= 0.0:
+            raise ValueError(f"Mixture weights must be non-negative and sum > 0, got {weights}")
         weights /= weights.sum()
         chosen = keys[int(rng.choice(len(keys), p=weights))]
         return sample_repulsion_gain_spec(chosen, rng)

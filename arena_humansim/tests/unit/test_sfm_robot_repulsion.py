@@ -14,6 +14,7 @@ def _setup_sfm_pool(
     pool_empty: Callable[..., AgentPool],
     agent_factory: Callable[..., BaseAgent],
     robot_repulsion_gain: float,
+    robot_x: float = 0.5,
 ) -> tuple[AgentPool, SFMPlanner]:
     pool = pool_empty(capacity=8)
     planner = SFMPlanner()
@@ -25,8 +26,8 @@ def _setup_sfm_pool(
     pool.robot_repulsion_gain[0] = robot_repulsion_gain
     pool.policy_idx[0] = 0
 
-    # Agent 2 (robot) at (0.5, 0.0) blocking path
-    pool.add_agent(agent_factory(agent_id=2, x=0.5, y=0.0))
+    # Agent 2 (robot) at (robot_x, 0.0) blocking path
+    pool.add_agent(agent_factory(agent_id=2, x=robot_x, y=0.0))
     pool.kind[1] = KIND_ROBOT
     pool.policy_idx[1] = 0
 
@@ -74,3 +75,22 @@ def test_sfm_zero_gain_repulsion_ignores_robot(
 
     # Repulsion force on agent 0 from robot should be exactly 0
     assert np.allclose(f_rep[0], 0.0)
+
+
+def test_sfm_reaction_gain_modulates_interaction_range(
+    pool_empty: Callable[..., AgentPool],
+    agent_factory: Callable[..., BaseAgent],
+) -> None:
+    # Test that robot_reaction_gain scales the interaction range B
+    # Place robot at 0.8m (beyond touching distance 0.5m) so (r_ij - d) < 0
+    pool_early, planner_early = _setup_sfm_pool(pool_empty, agent_factory, robot_repulsion_gain=1.0, robot_x=0.8)
+    pool_early.robot_reaction_gain[0] = 1.5  # early anticipation / longer interaction range
+
+    pool_delayed, planner_delayed = _setup_sfm_pool(pool_empty, agent_factory, robot_repulsion_gain=1.0, robot_x=0.8)
+    pool_delayed.robot_reaction_gain[0] = 0.5  # sluggish / short interaction range
+
+    _, f_rep_early, _, _ = planner_early._compute_forces_pool(pool_early)
+    _, f_rep_delayed, _, _ = planner_delayed._compute_forces_pool(pool_delayed)
+
+    # At distance 0.5m, the early-reacting pedestrian feels more repulsive force than the delayed one
+    assert abs(f_rep_early[0, 0]) > abs(f_rep_delayed[0, 0])

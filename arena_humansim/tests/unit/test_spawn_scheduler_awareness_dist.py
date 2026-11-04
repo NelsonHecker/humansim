@@ -49,3 +49,46 @@ def test_sample_awareness_continuous_distribution() -> None:
     assert np.all(samples >= 0.2)
     assert np.all(samples <= 0.9)
     assert abs(float(samples.mean()) - 0.7) < 0.02
+
+
+def test_sample_awareness_validation() -> None:
+    import pytest
+
+    rng = np.random.default_rng(789)
+
+    with pytest.raises(ValueError, match="Unknown awareness preset"):
+        sample_awareness_spec("invalid_preset", rng)
+
+    with pytest.raises(ValueError, match="Mixture weights must be non-negative"):
+        sample_awareness_spec({"blind": -0.5, "normal": 0.5}, rng)
+
+    # List of names without weights dicts
+    list_spec = ["blind", "normal"]
+    res = sample_awareness_spec(list_spec, rng)
+    assert res in (0.0, 1.0)
+
+
+def test_spawn_scheduler_all_four_fields_propagation() -> None:
+    from arena_humansim.core.spawn_scheduler import SpawnScheduler
+    from arena_humansim.utils.types import AgentTemplate, Pose2D, Shape, SourceConfig
+
+    scheduler = SpawnScheduler(rng=np.random.default_rng(42))
+    source = SourceConfig(
+        name="source_0",
+        pose=Pose2D(x=0.0, y=0.0, theta=0.0),
+        shape=Shape(type="circle", radius=1.0),
+        agent=AgentTemplate(
+            agent_type="adult",
+            robot_awareness=0.5,
+            robot_repulsion_gain=1.8,
+            robot_fov_gain=0.7,
+            robot_reaction_gain=1.3,
+        ),
+    )
+    scheduler.add_source(source)
+    # Trigger sample
+    req = scheduler._sample_spawn_request(source, tick_count=0, seq=1)
+    assert req.robot_awareness == 0.5
+    assert req.robot_repulsion_gain == 1.8
+    assert req.robot_fov_gain == 0.7
+    assert req.robot_reaction_gain == 1.3

@@ -461,12 +461,14 @@ def _orca_kernel(
                 if kind[j] == 1 and kind[i] != 1:
                     if robot_awareness[i] <= 0.0:
                         continue
-                    dx = pos[j, 0] - x
-                    dy = pos[j, 1] - y
-                    eff_vr = vision_range[i] * robot_awareness[i]
-                    if dx * dx + dy * dy > eff_vr * eff_vr:
-                        continue
-                    combined_r = ra + radius[j] * robot_repulsion_gain[i]
+                    if robot_awareness[i] < 1.0:
+                        dx = pos[j, 0] - x
+                        dy = pos[j, 1] - y
+                        eff_vr = vision_range[i] * robot_awareness[i]
+                        if dx * dx + dy * dy > eff_vr * eff_vr:
+                            continue
+                    eff_r_robot = max(0.05, radius[j] * max(0.1, robot_repulsion_gain[i]))
+                    combined_r = ra + eff_r_robot
             n_found += 1
             n_lines = _agent_line(lines, n_lines, pos[j, 0] - x, pos[j, 1] - y, vx - vel[j, 0], vy - vel[j, 1], vx, vy, combined_r, inv_tau, inv_dt)
 

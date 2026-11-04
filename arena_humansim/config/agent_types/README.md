@@ -21,6 +21,12 @@ Perception (`perception:`):
 - `vision_fov` (degrees, full angle - 360 = omnidirectional)
 - `proximity_sense` (m) - near-field detection radius independent of FOV.
 - `vision_occlusion` (bool, not a distribution) - whether walls block line of sight.
+- `robot_awareness` (float [0.0, 1.0] or preset name) - perception gate against robots. `0.0` blinds the human to robots while human-human social navigation remains 100% active.
+- `robot_repulsion_gain` (float >= 0.0 or preset name) - planner-dependent avoidance gain against robots. In SFM, scales repulsive force magnitude A; in ORCA, scales perceived obstacle radius.
+- `robot_fov_gain` (float >= 0.0 or preset name) - asymmetric field-of-view multiplier for robot detection (e.g. 0.3 for tunnel vision, 1.2 for hyper-vigilant scanning). Pruned upstream in perception.
+- `robot_reaction_gain` (float >= 0.05 or preset name) - in SFM, scales interaction range B (early anticipation vs sluggish reaction).
+
+Built-in presets for robot awareness: `blind`, `distracted`, `normal`, `interested`, `aggressive`, `scared`.
 
 Local planner (`local_planner_params:`):
 

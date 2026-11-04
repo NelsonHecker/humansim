@@ -123,3 +123,55 @@ def test_asymmetric_fov_constriction_for_robot(pool_empty: Callable[..., AgentPo
 
     assert 1 not in neighbors_of_1, "Tunnel-vision human against robot should miss robot outside constricted FOV cone"
     assert 2 in neighbors_of_1, "Human at same position should be perceived by full 180 FOV"
+
+
+def test_kdtree_robot_awareness_gating(pool_empty: Callable[..., AgentPool], agent_factory: Callable[..., BaseAgent]) -> None:
+    # 70 agents (> 64 threshold) triggers _compute_kdtree
+    pool = pool_empty(capacity=80)
+    perception = DefaultPerception()
+
+    # Agent 0: Human blind to robot
+    pool.add_agent(agent_factory(agent_id=1, x=0.0, y=0.0))
+    pool.kind[0] = KIND_HUMAN
+    pool.robot_awareness[0] = 0.0
+
+    # Agent 1: Robot at (1.0, 0.0)
+    pool.add_agent(agent_factory(agent_id=2, x=1.0, y=0.0))
+    pool.kind[1] = KIND_ROBOT
+
+    # Agents 2..69: Other humans scattered around
+    for i in range(2, 70):
+        pool.add_agent(agent_factory(agent_id=i + 1, x=float(i % 10) * 0.5, y=float(i // 10) * 0.5))
+        pool.kind[i] = KIND_HUMAN
+
+    perception.compute_pool(pool)
+
+    start = int(pool.neighbor_indptr[0])
+    stop = int(pool.neighbor_indptr[1])
+    neighbors_of_0 = list(pool.neighbor_indices[start:stop])
+
+    assert 1 not in neighbors_of_0, "KD-tree path must gate robot out of blind human neighbor list"
+    assert len(neighbors_of_0) > 0, "KD-tree path must preserve nearby humans for blind human"
+
+
+def test_all_human_crowd_invariant(pool_empty: Callable[..., AgentPool], agent_factory: Callable[..., BaseAgent]) -> None:
+    # An all-human crowd should have 100% identical perception graph whether awareness is 1.0 or 0.0
+    pool_normal = pool_empty(capacity=16)
+    pool_blind = pool_empty(capacity=16)
+    perception = DefaultPerception()
+
+    positions = [(0.0, 0.0), (1.0, 0.5), (0.5, 1.0), (2.0, 1.5), (1.5, 2.0)]
+    for idx, (x, y) in enumerate(positions):
+        pool_normal.add_agent(agent_factory(agent_id=idx + 1, x=x, y=y))
+        pool_normal.kind[idx] = KIND_HUMAN
+        pool_normal.robot_awareness[idx] = 1.0
+
+        pool_blind.add_agent(agent_factory(agent_id=idx + 1, x=x, y=y))
+        pool_blind.kind[idx] = KIND_HUMAN
+        pool_blind.robot_awareness[idx] = 0.0
+
+    perception.compute_pool(pool_normal)
+    perception.compute_pool(pool_blind)
+
+    np.testing.assert_array_equal(pool_normal.neighbor_indptr, pool_blind.neighbor_indptr)
+    np.testing.assert_array_equal(pool_normal.neighbor_indices, pool_blind.neighbor_indices)

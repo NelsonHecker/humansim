@@ -144,38 +144,59 @@ class ObstacleData:
 
 def _resolve_awareness_tuple(
     aware_raw: Any,
-    gain_raw: Any,
+    gain_raw: Any = None,
     fov_gain_raw: Any = None,
     react_gain_raw: Any = None,
+    robot_aware: bool | None = None,
 ) -> tuple[float | None, float | None, float | None, float | None]:
-    awareness: float | None = None
-    repulsion_gain: float | None = None
-    fov_gain: float | None = None
-    react_gain: float | None = None
+    for name, val in [
+        ("robot_awareness", aware_raw),
+        ("robot_repulsion_gain", gain_raw),
+        ("robot_fov_gain", fov_gain_raw),
+        ("robot_reaction_gain", react_gain_raw),
+    ]:
+        if isinstance(val, (dict, list)):
+            raise TypeError(f"Scripted agents require a scalar, bool, or preset name for {name}, got {type(val).__name__}")
+
+    baseline_tuple: tuple[float, float, float, float] | None = None
+    if robot_aware is not None:
+        baseline_tuple = AWARENESS_PRESETS["normal"] if robot_aware else AWARENESS_PRESETS["blind"]
+
+    awareness: float | None = baseline_tuple[0] if baseline_tuple is not None else None
+    repulsion_gain: float | None = baseline_tuple[1] if baseline_tuple is not None else None
+    fov_gain: float | None = baseline_tuple[2] if baseline_tuple is not None else None
+    react_gain: float | None = baseline_tuple[3] if baseline_tuple is not None else None
+
     if aware_raw is not None:
         if isinstance(aware_raw, bool):
-            awareness = 1.0 if aware_raw else 0.0
-            repulsion_gain = 1.0 if aware_raw else 0.0
-            fov_gain = 1.0 if aware_raw else 0.0
-            react_gain = 1.0 if aware_raw else 0.0
+            preset = AWARENESS_PRESETS["normal"] if aware_raw else AWARENESS_PRESETS["blind"]
+            awareness = preset[0]
+            if gain_raw is None and baseline_tuple is None:
+                repulsion_gain = preset[1]
+            if fov_gain_raw is None and baseline_tuple is None:
+                fov_gain = preset[2]
+            if react_gain_raw is None and baseline_tuple is None:
+                react_gain = preset[3]
         elif isinstance(aware_raw, (int, float)):
             awareness = float(np.clip(float(aware_raw), 0.0, 1.0))
         elif isinstance(aware_raw, str):
             key = aware_raw.strip().lower()
             if key in AWARENESS_PRESETS:
-                awareness, preset_gain, preset_fov, preset_react = AWARENESS_PRESETS[key]
-                if gain_raw is None:
-                    repulsion_gain = preset_gain
-                if fov_gain_raw is None:
-                    fov_gain = preset_fov
-                if react_gain_raw is None:
-                    react_gain = preset_react
+                p_aw, p_gn, p_fov, p_react = AWARENESS_PRESETS[key]
+                awareness = p_aw
+                if gain_raw is None and baseline_tuple is None:
+                    repulsion_gain = p_gn
+                if fov_gain_raw is None and baseline_tuple is None:
+                    fov_gain = p_fov
+                if react_gain_raw is None and baseline_tuple is None:
+                    react_gain = p_react
             else:
                 try:
                     awareness = float(np.clip(float(key), 0.0, 1.0))
                 except ValueError:
-                    awareness = 1.0
-    if gain_raw is not None and repulsion_gain is None:
+                    raise ValueError(f"Unknown awareness preset {aware_raw!r}; valid presets: {', '.join(sorted(AWARENESS_PRESETS))}") from None
+
+    if gain_raw is not None:
         if isinstance(gain_raw, (int, float)):
             repulsion_gain = max(0.0, float(gain_raw))
         elif isinstance(gain_raw, str):
@@ -186,17 +207,34 @@ def _resolve_awareness_tuple(
                 try:
                     repulsion_gain = max(0.0, float(key))
                 except ValueError:
-                    repulsion_gain = 1.0
+                    raise ValueError(f"Unknown repulsion preset {gain_raw!r}; valid presets: {', '.join(sorted(AWARENESS_PRESETS))}") from None
+
     if fov_gain_raw is not None:
-        try:
+        if isinstance(fov_gain_raw, (int, float)):
             fov_gain = max(0.0, float(fov_gain_raw))
-        except (ValueError, TypeError):
-            pass
+        elif isinstance(fov_gain_raw, str):
+            key = fov_gain_raw.strip().lower()
+            if key in AWARENESS_PRESETS:
+                fov_gain = AWARENESS_PRESETS[key][2]
+            else:
+                try:
+                    fov_gain = max(0.0, float(key))
+                except ValueError:
+                    raise ValueError(f"Unknown fov preset {fov_gain_raw!r}; valid presets: {', '.join(sorted(AWARENESS_PRESETS))}") from None
+
     if react_gain_raw is not None:
-        try:
+        if isinstance(react_gain_raw, (int, float)):
             react_gain = max(0.0, float(react_gain_raw))
-        except (ValueError, TypeError):
-            pass
+        elif isinstance(react_gain_raw, str):
+            key = react_gain_raw.strip().lower()
+            if key in AWARENESS_PRESETS:
+                react_gain = AWARENESS_PRESETS[key][3]
+            else:
+                try:
+                    react_gain = max(0.0, float(key))
+                except ValueError:
+                    raise ValueError(f"Unknown reaction preset {react_gain_raw!r}; valid presets: {', '.join(sorted(AWARENESS_PRESETS))}") from None
+
     return awareness, repulsion_gain, fov_gain, react_gain
 
 
@@ -1176,10 +1214,11 @@ class AgentManager(Node):
                 a.agent_id = self._allocate_robot_id() if int(a.kind) == int(AgentKind.ROBOT) else self._allocate_agent_id()
             if any(v is not None for v in (a.robot_aware, a.robot_awareness, a.robot_repulsion_gain, getattr(a, "robot_fov_gain", None), getattr(a, "robot_reaction_gain", None))):
                 aw, gn, fov_g, react_g = _resolve_awareness_tuple(
-                    a.robot_awareness if a.robot_aware is None else (1.0 if a.robot_aware else 0.0),
-                    a.robot_repulsion_gain if a.robot_aware is None else (1.0 if a.robot_aware else 0.0),
-                    getattr(a, "robot_fov_gain", None) if a.robot_aware is None else (1.0 if a.robot_aware else 0.0),
-                    getattr(a, "robot_reaction_gain", None) if a.robot_aware is None else (1.0 if a.robot_aware else 0.0),
+                    a.robot_awareness,
+                    a.robot_repulsion_gain,
+                    getattr(a, "robot_fov_gain", None),
+                    getattr(a, "robot_reaction_gain", None),
+                    robot_aware=a.robot_aware,
                 )
                 self._scenario_awareness_overrides[int(a.agent_id)] = (aw, gn, fov_g, react_g)
             if int(a.kind) == int(AgentKind.ROBOT) and a.services:
@@ -1302,6 +1341,8 @@ class AgentManager(Node):
                     sink_affinity=[SinkAffinity(sink_name=f"sink_{sa.sink_idx}", weight=float(sa.weight)) for sa in tmpl.sink_affinity],
                     robot_awareness=tmpl.robot_awareness,
                     robot_repulsion_gain=tmpl.robot_repulsion_gain,
+                    robot_fov_gain=tmpl.robot_fov_gain,
+                    robot_reaction_gain=tmpl.robot_reaction_gain,
                     robot_aware=tmpl.robot_aware,
                 ),
             )
