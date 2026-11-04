@@ -388,6 +388,7 @@ class SFMPlanner(LocalPlanner):
                 robot_pairs = pair_obs[nbr_is_robot]
                 eff_strength[nbr_is_robot] *= pool.robot_repulsion_gain[robot_pairs]
                 eff_range[nbr_is_robot] *= pool.robot_reaction_gain[robot_pairs]
+            eff_range = np.maximum(eff_range, 1e-4)
             magnitudes = eff_strength * np.exp((r_ij - dists) / eff_range)
 
             lam = aniso[pair_obs]
@@ -516,6 +517,7 @@ class SFMPlanner(LocalPlanner):
                     eff_r = eff_r.copy()
                     eff_s[is_robot_nbr] *= rep_gain
                     eff_r[is_robot_nbr] *= react_gain
+                eff_r = np.maximum(eff_r, 1e-4)
                 magnitudes = eff_s * np.exp((r_ij - dists) / eff_r)
 
                 cos_phi = -normals[:, 0] * e_goal_x + -normals[:, 1] * e_goal_y

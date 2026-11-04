@@ -185,11 +185,11 @@ class SpawnScheduler(Loggable):
         if robot_repulsion_gain is None and preset_tuple is not None:
             robot_repulsion_gain = preset_tuple[1]
 
-        robot_fov_gain = sample_awareness_spec(fov_spec, rng)
+        robot_fov_gain = sample_fov_gain_spec(fov_spec, rng)
         if robot_fov_gain is None and preset_tuple is not None:
             robot_fov_gain = preset_tuple[2]
 
-        robot_reaction_gain = sample_repulsion_gain_spec(reaction_spec, rng)
+        robot_reaction_gain = sample_reaction_gain_spec(reaction_spec, rng)
         if robot_reaction_gain is None and preset_tuple is not None:
             robot_reaction_gain = preset_tuple[3]
 
@@ -263,22 +263,30 @@ class SpawnScheduler(Loggable):
         return Pose2D(x=x, y=y, theta=0.0)
 
 
-def sample_awareness_spec(spec: Any, rng: np.random.Generator) -> float | None:
-    """Sample continuous robot awareness in [0.0, 1.0] from a constant, preset, mixture, or distribution."""
+def _sample_gain_spec(
+    spec: Any,
+    rng: np.random.Generator,
+    slot: int,
+    clip_low: float = 0.0,
+    clip_high: float = float("inf"),
+    field_name: str = "gain",
+) -> float | None:
+    """Sample continuous robot gain from a constant, preset, mixture, or distribution."""
     if spec is None:
         return None
     if isinstance(spec, bool):
-        return 1.0 if spec else 0.0
+        preset = AWARENESS_PRESETS["normal"] if spec else AWARENESS_PRESETS["blind"]
+        return preset[slot]
     if isinstance(spec, (int, float)):
-        return float(np.clip(spec, 0.0, 1.0))
+        return float(np.clip(float(spec), clip_low, clip_high))
     if isinstance(spec, str):
         key = spec.strip().lower()
         if key in AWARENESS_PRESETS:
-            return AWARENESS_PRESETS[key][0]
+            return AWARENESS_PRESETS[key][slot]
         try:
-            return float(np.clip(float(key), 0.0, 1.0))
+            return float(np.clip(float(key), clip_low, clip_high))
         except ValueError:
-            raise ValueError(f"Unknown awareness preset {spec!r}; valid presets: {', '.join(sorted(AWARENESS_PRESETS))}") from None
+            raise ValueError(f"Unknown {field_name} preset {spec!r}; valid presets: {', '.join(sorted(AWARENESS_PRESETS))}") from None
     if isinstance(spec, list):
         if not spec:
             return None
@@ -297,77 +305,38 @@ def sample_awareness_spec(spec: Any, rng: np.random.Generator) -> float | None:
             val = chosen.get("value", chosen.get("preset"))
         else:
             val = chosen
-        return sample_awareness_spec(val, rng)
+        return _sample_gain_spec(val, rng, slot, clip_low, clip_high, field_name)
     if isinstance(spec, dict):
         if "mean" in spec:
             mean = float(spec["mean"])
             std = float(spec.get("std", 0.0))
-            clip_low = float(spec.get("clip_low", 0.0))
-            clip_high = float(spec.get("clip_high", 1.0))
+            low = float(spec.get("clip_low", clip_low))
+            high = float(spec.get("clip_high", clip_high))
             val = float(rng.normal(mean, std)) if std > 0.0 else mean
-            return float(np.clip(val, clip_low, clip_high))
+            return float(np.clip(val, low, high))
         if "mixture" in spec and isinstance(spec["mixture"], list):
-            return sample_awareness_spec(spec["mixture"], rng)
+            return _sample_gain_spec(spec["mixture"], rng, slot, clip_low, clip_high, field_name)
         keys = list(spec.keys())
         weights = np.array([float(spec[k]) for k in keys], dtype=np.float64)
         if np.any(weights < 0.0) or weights.sum() <= 0.0:
             raise ValueError(f"Mixture weights must be non-negative and sum > 0, got {weights}")
         weights /= weights.sum()
         chosen = keys[int(rng.choice(len(keys), p=weights))]
-        return sample_awareness_spec(chosen, rng)
+        return _sample_gain_spec(chosen, rng, slot, clip_low, clip_high, field_name)
     return None
+
+
+def sample_awareness_spec(spec: Any, rng: np.random.Generator) -> float | None:
+    return _sample_gain_spec(spec, rng, slot=0, clip_low=0.0, clip_high=1.0, field_name="awareness")
 
 
 def sample_repulsion_gain_spec(spec: Any, rng: np.random.Generator) -> float | None:
-    """Sample robot repulsion gain from a constant, preset, mixture, or distribution."""
-    if spec is None:
-        return None
-    if isinstance(spec, bool):
-        return 1.0 if spec else 0.0
-    if isinstance(spec, (int, float)):
-        return max(0.0, float(spec))
-    if isinstance(spec, str):
-        key = spec.strip().lower()
-        if key in AWARENESS_PRESETS:
-            return AWARENESS_PRESETS[key][1]
-        try:
-            return max(0.0, float(key))
-        except ValueError:
-            raise ValueError(f"Unknown repulsion preset {spec!r}; valid presets: {', '.join(sorted(AWARENESS_PRESETS))}") from None
-    if isinstance(spec, list):
-        if not spec:
-            return None
-        weights_list: list[float] = []
-        for item in spec:
-            if isinstance(item, dict):
-                weights_list.append(float(item.get("weight", 1.0)))
-            else:
-                weights_list.append(1.0)
-        weights = np.array(weights_list, dtype=np.float64)
-        if np.any(weights < 0.0) or weights.sum() <= 0.0:
-            raise ValueError(f"Mixture weights must be non-negative and sum > 0, got {weights}")
-        weights /= weights.sum()
-        chosen = spec[int(rng.choice(len(spec), p=weights))]
-        if isinstance(chosen, dict):
-            val = chosen.get("value", chosen.get("preset"))
-        else:
-            val = chosen
-        return sample_repulsion_gain_spec(val, rng)
-    if isinstance(spec, dict):
-        if "mean" in spec:
-            mean = float(spec["mean"])
-            std = float(spec.get("std", 0.0))
-            clip_low = float(spec.get("clip_low", 0.0))
-            clip_high = float(spec.get("clip_high", float("inf")))
-            val = float(rng.normal(mean, std)) if std > 0.0 else mean
-            return max(0.0, float(np.clip(val, clip_low, clip_high)))
-        if "mixture" in spec and isinstance(spec["mixture"], list):
-            return sample_repulsion_gain_spec(spec["mixture"], rng)
-        keys = list(spec.keys())
-        weights = np.array([float(spec[k]) for k in keys], dtype=np.float64)
-        if np.any(weights < 0.0) or weights.sum() <= 0.0:
-            raise ValueError(f"Mixture weights must be non-negative and sum > 0, got {weights}")
-        weights /= weights.sum()
-        chosen = keys[int(rng.choice(len(keys), p=weights))]
-        return sample_repulsion_gain_spec(chosen, rng)
-    return None
+    return _sample_gain_spec(spec, rng, slot=1, clip_low=0.0, clip_high=float("inf"), field_name="repulsion")
+
+
+def sample_fov_gain_spec(spec: Any, rng: np.random.Generator) -> float | None:
+    return _sample_gain_spec(spec, rng, slot=2, clip_low=0.0, clip_high=float("inf"), field_name="fov")
+
+
+def sample_reaction_gain_spec(spec: Any, rng: np.random.Generator) -> float | None:
+    return _sample_gain_spec(spec, rng, slot=3, clip_low=0.05, clip_high=float("inf"), field_name="reaction")

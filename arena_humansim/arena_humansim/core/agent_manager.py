@@ -224,14 +224,14 @@ def _resolve_awareness_tuple(
 
     if react_gain_raw is not None:
         if isinstance(react_gain_raw, (int, float)):
-            react_gain = max(0.0, float(react_gain_raw))
+            react_gain = max(0.05, float(react_gain_raw))
         elif isinstance(react_gain_raw, str):
             key = react_gain_raw.strip().lower()
             if key in AWARENESS_PRESETS:
                 react_gain = AWARENESS_PRESETS[key][3]
             else:
                 try:
-                    react_gain = max(0.0, float(key))
+                    react_gain = max(0.05, float(key))
                 except ValueError:
                     raise ValueError(f"Unknown reaction preset {react_gain_raw!r}; valid presets: {', '.join(sorted(AWARENESS_PRESETS))}") from None
 

@@ -81,8 +81,8 @@ def test_spawn_scheduler_all_four_fields_propagation() -> None:
             agent_type="adult",
             robot_awareness=0.5,
             robot_repulsion_gain=1.8,
-            robot_fov_gain=0.7,
-            robot_reaction_gain=1.3,
+            robot_fov_gain=1.2,  # > 1.0 must not be clipped to 1.0
+            robot_reaction_gain=0.0,  # 0.0 must be floored to 0.05
         ),
     )
     scheduler.add_source(source)
@@ -90,5 +90,5 @@ def test_spawn_scheduler_all_four_fields_propagation() -> None:
     req = scheduler._sample_spawn_request(source, tick_count=0, seq=1)
     assert req.robot_awareness == 0.5
     assert req.robot_repulsion_gain == 1.8
-    assert req.robot_fov_gain == 0.7
-    assert req.robot_reaction_gain == 1.3
+    assert req.robot_fov_gain == 1.2
+    assert req.robot_reaction_gain == 0.05

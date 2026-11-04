@@ -28,6 +28,17 @@ Perception (`perception:`):
 
 Built-in presets for robot awareness: `blind`, `distracted`, `normal`, `interested`, `aggressive`, `scared`.
 
+### Per-Planner Capability Matrix for Robot Interaction
+
+| Parameter | SFM / HSFM | ORCA | Physical Meaning |
+|---|---|---|---|
+| `robot_awareness` | ✅ Filtered in perception CSR | ✅ Distance cutoff when $< 1.0$ | Visibility gate: $0.0$ removes robot from perception |
+| `robot_repulsion_gain` | ✅ Force magnitude ($A$) | ✅ Perceived obstacle radius | Yielding urgency / clearance scale |
+| `robot_fov_gain` | ✅ Filtered in perception CSR | ❌ Ignored | Asymmetric FOV cone against robots |
+| `robot_reaction_gain` | ✅ Interaction range ($B$) | ❌ Ignored | Reaction distance / anticipation envelope |
+
+> Note: ORCA builds its private neighbor list and solves instantaneous geometric velocity obstacles; hence it consumes `robot_awareness` (to prune distant robots when $< 1.0$) and `robot_repulsion_gain` (to size non-reciprocating obstacle clearance), while `robot_fov_gain` and `robot_reaction_gain` are specific to force-based planners (`sfm`, `hsfm`).
+
 Local planner (`local_planner_params:`):
 
 Schema is taken from the active planner's `PARAM_DEFAULTS` (`sfm`: `relaxation_time`, `repulsion_strength`, `repulsion_range`, `anisotropy`. `hsfm` adds `lateral_gain`, `lateral_damping`, `angular_gain`, `angular_damping`, `heading_source`. the other force models declare their own keys, the rest take none). yaml entries override individual keys, unset ones keep the planner's default distribution. Full per-planner key table: [../../arena_humansim/local_planner/README.md](../../arena_humansim/local_planner/README.md).
@@ -284,7 +295,12 @@ For a `dynamic:` scenario entry, `ArenaHumanDynamicObstacle.sample_params` (in [
 - `elder` - slower, narrower FOV, longer SFM relaxation. Demonstrates how heterogeneity drops out of a handful of distribution tweaks.
 - `child` - small body (0.18 m), wide speed spread (0.4-1.8 m/s), 3 m vision, weaker SFM repulsion.
 - `hurried` - fast (desired 1.7 m/s), narrower FOV, shorter SFM relaxation and repulsion range.
-- `distracted` - phone-walker: 2 m vision, 90deg FOV, longer SFM relaxation.
+- `distracted` - phone-walker: 2 m vision, 90deg FOV, longer SFM relaxation, reduced robot awareness (0.3), repulsion (0.6), FOV (0.3), and reaction range (0.5).
+- `blind` - pedestrian oblivious to robots (`robot_awareness: 0.0`, `robot_repulsion_gain: 0.0`, `robot_fov_gain: 0.0`). Human-human social navigation remains 100% active.
+- `normal` - standard adult pedestrian with nominal awareness and clearance against robots (`1.0, 1.0, 1.0, 1.0`).
+- `interested` - curious pedestrian watching or approaching the robot (`robot_awareness: 1.0`, `robot_repulsion_gain: 0.6`).
+- `aggressive` - assertive pedestrian with reduced robot avoidance clearance and assertive cutting across (`robot_repulsion_gain: 0.4`, `robot_fov_gain: 0.8`, `robot_reaction_gain: 1.2`).
+- `scared` - cautious pedestrian yielding early with wide clearance (`robot_repulsion_gain: 2.0`, `robot_fov_gain: 1.2`, `robot_reaction_gain: 0.7`).
 - `robot` - fixed (non-distribution) values for a robot-driven agent: zero `min_turning_radius`, 360deg FOV, no `idle_gaze_rate`.
 - `wheelchair_manual` - manually propelled wheelchair user: `extends: adult`, `along_heading` kinematics on `hsfm` with `heading_source: total`, a 1.1 m capsule footprint, push-stroke speed modulation (two harmonics), stall recovery with a 0.3 m reverse, seated pose with arm push strokes and the `human::mobility::wheelchair` asset. Every number in the file is a placeholder pending literature values (push cadence, stroke speed profile, footprint), not a measured profile.
 - `adult_limp_right` - adult with a right-leg limp: `extends: adult`, uneven cycle timing (`phase_warp.split`), one speed dip and one lateral lurch per cycle, and an asymmetric walk pose (stiff right knee, shortened right hip swing, trunk lean). Every number in the file is a placeholder pending a fitted profile.

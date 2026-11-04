@@ -106,3 +106,32 @@ def test_agent_type_preset_probe_slots() -> None:
 
     aggr_p = PerceptionDist(robot_reaction_gain="aggressive")
     assert aggr_p.robot_reaction_gain.mean == 1.2
+
+
+def test_resolve_awareness_tuple_reaction_floor() -> None:
+    from arena_humansim.core.agent_manager import _resolve_awareness_tuple
+
+    # Ensure reaction gain is floored at 0.05 to avoid division by zero in SFM
+    _, _, _, react_g = _resolve_awareness_tuple(1.0, 1.0, 1.0, 0.0)
+    assert react_g == 0.05
+
+
+def test_all_six_archetypes_match_preset_table() -> None:
+    from pathlib import Path
+    from arena_humansim.core.agents.loader import load_agent_type_from_file
+    from arena_humansim.core.agents.types import AWARENESS_PRESETS
+
+    agent_types_dir = Path(__file__).resolve().parents[2] / "config" / "agent_types"
+
+    for name, expected_tuple in AWARENESS_PRESETS.items():
+        yaml_path = agent_types_dir / f"{name}.yaml"
+        assert yaml_path.exists(), f"Archetype YAML for preset {name!r} not found at {yaml_path}"
+
+        atype = load_agent_type_from_file(yaml_path)
+        actual_tuple = (
+            atype.perception.robot_awareness.mean,
+            atype.perception.robot_repulsion_gain.mean,
+            atype.perception.robot_fov_gain.mean,
+            atype.perception.robot_reaction_gain.mean,
+        )
+        assert actual_tuple == expected_tuple, f"Mismatch in {name}.yaml: expected {expected_tuple}, got {actual_tuple}"
