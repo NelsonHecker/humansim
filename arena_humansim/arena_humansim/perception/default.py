@@ -113,7 +113,8 @@ class DefaultPerception(Perception):
                 blind_mask = awareness <= 0.0
                 mask[h_idx, r_idx] &= ~blind_mask
 
-                partial = (awareness > 0.0) & (awareness < 1.0)
+                fov_gain = pool.robot_fov_gain[human_rows, None]
+                partial = ((awareness > 0.0) & (awareness < 1.0)) | (fov_gain < 1.0)
                 if np.any(partial):
                     p_rows, p_cols = np.nonzero(partial)
                     orig_r = human_rows[p_rows]
@@ -128,7 +129,7 @@ class DefaultPerception(Perception):
                     if np.any(surviving):
                         sr_r = orig_r[surviving]
                         sr_c = orig_c[surviving]
-                        eff_fov = pool.vision_fov[sr_r] * pool.robot_awareness[sr_r]
+                        eff_fov = pool.vision_fov[sr_r] * pool.robot_fov_gain[sr_r]
                         cos_half = np.cos(np.radians(eff_fov * 0.5))
                         heading = pool.theta[sr_r]
                         dot = diff[sr_r, sr_c, 0] * np.cos(heading) + diff[sr_r, sr_c, 1] * np.sin(heading)
@@ -204,7 +205,8 @@ class DefaultPerception(Perception):
             blind_idx = robot_nbr_idx[awareness <= 0.0]
             keep[blind_idx] = False
 
-            partial_sub = (awareness > 0.0) & (awareness < 1.0)
+            fov_gain = pool.robot_fov_gain[row[robot_nbr]]
+            partial_sub = ((awareness > 0.0) & (awareness < 1.0)) | (fov_gain < 1.0)
             if np.any(partial_sub):
                 partial_idx = robot_nbr_idx[partial_sub]
                 p_row = row[partial_idx]
@@ -220,7 +222,7 @@ class DefaultPerception(Perception):
                     s_idx = partial_idx[surviving]
                     s_row = p_row[surviving]
                     s_col = p_col[surviving]
-                    eff_fov = pool.vision_fov[s_row] * pool.robot_awareness[s_row]
+                    eff_fov = pool.vision_fov[s_row] * pool.robot_fov_gain[s_row]
                     cos_half = np.cos(np.radians(eff_fov * 0.5))
                     heading = pool.theta[s_row]
                     dx = positions[s_col, 0] - positions[s_row, 0]
@@ -269,6 +271,7 @@ class DefaultPerception(Perception):
         half_fov = np.radians(vision_fov * 0.5)
         heading = observer.pose.theta
         robot_awareness: float = getattr(agent.params.perception, "robot_awareness", 1.0)
+        robot_fov_gain: float = getattr(agent.params.perception, "robot_fov_gain", robot_awareness)
 
         query_radius = max(vision_range, proximity_sense)
         neighbor_indices = self._shared_tree.query_ball_point([ox, oy], query_radius)
@@ -283,7 +286,7 @@ class DefaultPerception(Perception):
                 continue
             eff_range = vision_range * robot_awareness if nbr_is_robot else vision_range
             eff_prox = proximity_sense * robot_awareness if nbr_is_robot else proximity_sense
-            eff_fov = vision_fov * robot_awareness if nbr_is_robot else vision_fov
+            eff_fov = vision_fov * robot_fov_gain if nbr_is_robot else vision_fov
 
             nx, ny = self._shared_positions[idx]
             d = float(np.hypot(nx - ox, ny - oy))

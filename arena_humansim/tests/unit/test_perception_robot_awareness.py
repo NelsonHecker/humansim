@@ -91,3 +91,35 @@ def test_distracted_human_has_constricted_vision_range(pool_empty: Callable[...,
 
     assert 1 not in neighbors_of_1, "Distracted human should not perceive robot beyond constricted range (1.5m)"
     assert 2 in neighbors_of_1, "Distracted human should still perceive other humans at normal range"
+
+
+def test_asymmetric_fov_constriction_for_robot(pool_empty: Callable[..., AgentPool], agent_factory: Callable[..., BaseAgent]) -> None:
+    pool = pool_empty(capacity=8)
+    perception = DefaultPerception()
+
+    # Agent 1: Human facing East (theta=0), vision_fov=180 deg, range=5m
+    # robot_fov_gain=0.2 -> effective robot FOV is 36 deg (half-angle 18 deg)
+    pool.add_agent(agent_factory(agent_id=1, x=0.0, y=0.0))
+    pool.kind[0] = KIND_HUMAN
+    pool.vision_range[0] = 5.0
+    pool.vision_fov[0] = 180.0
+    pool.proximity_sense[0] = 0.5
+    pool.robot_awareness[0] = 1.0
+    pool.robot_fov_gain[0] = 0.2
+
+    # Robot at (2.0, 1.5) -> angle ~36.8 deg > 18 deg half-angle (outside robot FOV cone)
+    pool.add_agent(agent_factory(agent_id=2, x=2.0, y=1.5))
+    pool.kind[1] = KIND_ROBOT
+
+    # Human at (2.0, 1.5) -> within standard 180 deg FOV (half-angle 90 deg)
+    pool.add_agent(agent_factory(agent_id=3, x=2.0, y=1.5))
+    pool.kind[2] = KIND_HUMAN
+
+    perception.compute_pool(pool)
+
+    start = int(pool.neighbor_indptr[0])
+    stop = int(pool.neighbor_indptr[1])
+    neighbors_of_1 = list(pool.neighbor_indices[start:stop])
+
+    assert 1 not in neighbors_of_1, "Tunnel-vision human against robot should miss robot outside constricted FOV cone"
+    assert 2 in neighbors_of_1, "Human at same position should be perceived by full 180 FOV"

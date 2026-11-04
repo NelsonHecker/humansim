@@ -58,13 +58,14 @@ class ParamDist:
         return attrs.evolve(self, mean=mean, clip_low=max(self.clip_low + delta, min(self.clip_low, mean)), clip_high=self.clip_high + delta)
 
 
-AWARENESS_PRESETS: dict[str, tuple[float, float]] = {
-    "blind": (0.0, 0.0),
-    "distracted": (0.3, 1.0),
-    "normal": (1.0, 1.0),
-    "interested": (1.0, 0.6),
-    "aggressive": (1.0, 0.4),
-    "scared": (1.0, 2.0),
+# Preset mappings: (robot_awareness, robot_repulsion_gain, robot_fov_gain, robot_reaction_gain)
+AWARENESS_PRESETS: dict[str, tuple[float, float, float, float]] = {
+    "blind": (0.0, 0.0, 0.0, 1.0),
+    "distracted": (0.3, 0.6, 0.3, 0.5),
+    "normal": (1.0, 1.0, 1.0, 1.0),
+    "interested": (1.0, 0.6, 1.0, 1.0),
+    "aggressive": (1.0, 0.4, 0.8, 1.2),
+    "scared": (1.0, 2.0, 1.2, 0.7),
 }
 
 
@@ -367,6 +368,8 @@ class PerceptionDist:
     vision_occlusion: bool = True
     robot_awareness: ParamDist = attrs.field(default=ParamDist(1.0, clip_low=0.0, clip_high=1.0), converter=_as_awareness_dist)
     robot_repulsion_gain: ParamDist = attrs.field(default=ParamDist(1.0, clip_low=0.0), converter=_as_repulsion_dist)
+    robot_fov_gain: ParamDist = attrs.field(default=ParamDist(1.0, clip_low=0.0), converter=_as_awareness_dist)
+    robot_reaction_gain: ParamDist = attrs.field(default=ParamDist(1.0, clip_low=0.05), converter=_as_repulsion_dist)
 
 
 KINEMATICS = ("holonomic", "along_heading")
@@ -471,6 +474,8 @@ class SampledPerception:
     vision_occlusion: bool = True
     robot_awareness: float = 1.0
     robot_repulsion_gain: float = 1.0
+    robot_fov_gain: float = 1.0
+    robot_reaction_gain: float = 1.0
 
 
 @attrs.frozen
@@ -596,6 +601,8 @@ def sample_agent_type(
         vision_occlusion=agent_type.perception.vision_occlusion,
         robot_awareness=_sample_dist(agent_type.perception.robot_awareness, rng),
         robot_repulsion_gain=_sample_dist(agent_type.perception.robot_repulsion_gain, rng),
+        robot_fov_gain=_sample_dist(agent_type.perception.robot_fov_gain, rng),
+        robot_reaction_gain=_sample_dist(agent_type.perception.robot_reaction_gain, rng),
     )
 
     from arena_humansim.local_planner import LocalPlanner

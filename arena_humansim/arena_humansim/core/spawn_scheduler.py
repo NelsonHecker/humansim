@@ -172,8 +172,17 @@ class SpawnScheduler(Loggable):
 
         robot_awareness = sample_awareness_spec(awareness_spec, rng)
         robot_repulsion_gain = sample_repulsion_gain_spec(repulsion_spec, rng)
-        if robot_repulsion_gain is None and isinstance(awareness_spec, str) and awareness_spec.strip().lower() in AWARENESS_PRESETS:
-            robot_repulsion_gain = AWARENESS_PRESETS[awareness_spec.strip().lower()][1]
+        robot_fov_gain = sample_awareness_spec(getattr(tmpl, "robot_fov_gain", None), rng)
+        robot_reaction_gain = sample_repulsion_gain_spec(getattr(tmpl, "robot_reaction_gain", None), rng)
+
+        if isinstance(awareness_spec, str) and awareness_spec.strip().lower() in AWARENESS_PRESETS:
+            preset = AWARENESS_PRESETS[awareness_spec.strip().lower()]
+            if robot_repulsion_gain is None:
+                robot_repulsion_gain = preset[1]
+            if robot_fov_gain is None:
+                robot_fov_gain = preset[2]
+            if robot_reaction_gain is None:
+                robot_reaction_gain = preset[3]
 
         return SpawnRequest(
             pose=pose,
@@ -184,6 +193,8 @@ class SpawnScheduler(Loggable):
             lifetime=lifetime,
             robot_awareness=robot_awareness,
             robot_repulsion_gain=robot_repulsion_gain,
+            robot_fov_gain=robot_fov_gain,
+            robot_reaction_gain=robot_reaction_gain,
         )
 
     def _sample_pose_in_shape(self, center: Pose2D, shape: Shape, rng: np.random.Generator | None = None) -> Pose2D:

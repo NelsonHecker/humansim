@@ -12,7 +12,7 @@ def test_sample_awareness_presets() -> None:
     assert sample_repulsion_gain_spec("blind", rng) == 0.0
 
     assert sample_awareness_spec("distracted", rng) == 0.3
-    assert sample_repulsion_gain_spec("distracted", rng) == 1.0
+    assert sample_repulsion_gain_spec("distracted", rng) == 0.6
 
     assert sample_awareness_spec("normal", rng) == 1.0
     assert sample_repulsion_gain_spec("normal", rng) == 1.0

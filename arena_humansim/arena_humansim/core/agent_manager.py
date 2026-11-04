@@ -142,21 +142,34 @@ class ObstacleData:
     wall_segments: tuple[tuple[tuple[float, float], tuple[float, float]], ...]
 
 
-def _resolve_awareness_tuple(aware_raw: Any, gain_raw: Any) -> tuple[float | None, float | None]:
+def _resolve_awareness_tuple(
+    aware_raw: Any,
+    gain_raw: Any,
+    fov_gain_raw: Any = None,
+    react_gain_raw: Any = None,
+) -> tuple[float | None, float | None, float | None, float | None]:
     awareness: float | None = None
     repulsion_gain: float | None = None
+    fov_gain: float | None = None
+    react_gain: float | None = None
     if aware_raw is not None:
         if isinstance(aware_raw, bool):
             awareness = 1.0 if aware_raw else 0.0
             repulsion_gain = 1.0 if aware_raw else 0.0
+            fov_gain = 1.0 if aware_raw else 0.0
+            react_gain = 1.0 if aware_raw else 0.0
         elif isinstance(aware_raw, (int, float)):
             awareness = float(np.clip(float(aware_raw), 0.0, 1.0))
         elif isinstance(aware_raw, str):
             key = aware_raw.strip().lower()
             if key in AWARENESS_PRESETS:
-                awareness, preset_gain = AWARENESS_PRESETS[key]
+                awareness, preset_gain, preset_fov, preset_react = AWARENESS_PRESETS[key]
                 if gain_raw is None:
                     repulsion_gain = preset_gain
+                if fov_gain_raw is None:
+                    fov_gain = preset_fov
+                if react_gain_raw is None:
+                    react_gain = preset_react
             else:
                 try:
                     awareness = float(np.clip(float(key), 0.0, 1.0))
@@ -174,7 +187,17 @@ def _resolve_awareness_tuple(aware_raw: Any, gain_raw: Any) -> tuple[float | Non
                     repulsion_gain = max(0.0, float(key))
                 except ValueError:
                     repulsion_gain = 1.0
-    return awareness, repulsion_gain
+    if fov_gain_raw is not None:
+        try:
+            fov_gain = max(0.0, float(fov_gain_raw))
+        except (ValueError, TypeError):
+            pass
+    if react_gain_raw is not None:
+        try:
+            react_gain = max(0.0, float(react_gain_raw))
+        except (ValueError, TypeError):
+            pass
+    return awareness, repulsion_gain, fov_gain, react_gain
 
 
 _TUNABLE_PARAMS = frozenset(
@@ -572,7 +595,7 @@ class AgentManager(Node):
         self._sim_time_ns: int = 0
         self._subsystem_epoch_ns: int = 0
         self._pending_scenario_spawns: deque[tuple[int, AgentStateMsg]] = deque()
-        self._scenario_awareness_overrides: dict[int, tuple[float | None, float | None]] = {}
+        self._scenario_awareness_overrides: dict[int, tuple[float | None, float | None, float | None, float | None]] = {}
         self._pending_stimuli: deque[tuple[int, int, str, float]] = deque()
         self._stimulus_levels: dict[str, float] = {}
         self._meta_dirty = True
@@ -1151,12 +1174,14 @@ class AgentManager(Node):
         for a in scenario.agents:
             if int(a.agent_id) == 0:
                 a.agent_id = self._allocate_robot_id() if int(a.kind) == int(AgentKind.ROBOT) else self._allocate_agent_id()
-            if a.robot_aware is not None or a.robot_awareness is not None or a.robot_repulsion_gain is not None:
-                aw, gn = _resolve_awareness_tuple(
+            if any(v is not None for v in (a.robot_aware, a.robot_awareness, a.robot_repulsion_gain, getattr(a, "robot_fov_gain", None), getattr(a, "robot_reaction_gain", None))):
+                aw, gn, fov_g, react_g = _resolve_awareness_tuple(
                     a.robot_awareness if a.robot_aware is None else (1.0 if a.robot_aware else 0.0),
                     a.robot_repulsion_gain if a.robot_aware is None else (1.0 if a.robot_aware else 0.0),
+                    getattr(a, "robot_fov_gain", None) if a.robot_aware is None else (1.0 if a.robot_aware else 0.0),
+                    getattr(a, "robot_reaction_gain", None) if a.robot_aware is None else (1.0 if a.robot_aware else 0.0),
                 )
-                self._scenario_awareness_overrides[int(a.agent_id)] = (aw, gn)
+                self._scenario_awareness_overrides[int(a.agent_id)] = (aw, gn, fov_g, react_g)
             if int(a.kind) == int(AgentKind.ROBOT) and a.services:
                 self._robot_service_advertiser.register(int(a.agent_id), a.services)
             msg = AgentStateMsg()
@@ -1400,8 +1425,13 @@ class AgentManager(Node):
         agent_msg.desired_velocity = spawn_req.desired_velocity
         agent_msg.radius = spawn_req.agent_radius
         agent_msg.agent_type = spawn_req.agent_type
-        if spawn_req.robot_awareness is not None or spawn_req.robot_repulsion_gain is not None:
-            self._scenario_awareness_overrides[aid] = (spawn_req.robot_awareness, spawn_req.robot_repulsion_gain)
+        if any(v is not None for v in (spawn_req.robot_awareness, spawn_req.robot_repulsion_gain, getattr(spawn_req, "robot_fov_gain", None), getattr(spawn_req, "robot_reaction_gain", None))):
+            self._scenario_awareness_overrides[aid] = (
+                spawn_req.robot_awareness,
+                spawn_req.robot_repulsion_gain,
+                getattr(spawn_req, "robot_fov_gain", None),
+                getattr(spawn_req, "robot_reaction_gain", None),
+            )
         return self._build_base_agent(aid, agent_msg, list(spawn_req.waypoints))
 
     def _lookup_agent_name(self, name: str, kind: int | None = None) -> int | None:
@@ -2810,18 +2840,24 @@ class AgentManager(Node):
                 self._pool.interaction_class[idx] = interaction_classes.ROBOT
             self._pool.policy_idx[idx] = policy_idx
             if aid in self._scenario_awareness_overrides:
-                aw, gn = self._scenario_awareness_overrides[aid]
+                aw, gn, fov_g, react_g = self._scenario_awareness_overrides[aid]
+                perc_evolve: dict[str, Any] = {}
                 if aw is not None:
                     self._pool.robot_awareness[idx] = aw
-                    agent.params = attrs.evolve(
-                        agent.params,
-                        perception=attrs.evolve(agent.params.perception, robot_awareness=aw),
-                    )
+                    perc_evolve["robot_awareness"] = aw
                 if gn is not None:
                     self._pool.robot_repulsion_gain[idx] = gn
+                    perc_evolve["robot_repulsion_gain"] = gn
+                if fov_g is not None:
+                    self._pool.robot_fov_gain[idx] = fov_g
+                    perc_evolve["robot_fov_gain"] = fov_g
+                if react_g is not None:
+                    self._pool.robot_reaction_gain[idx] = react_g
+                    perc_evolve["robot_reaction_gain"] = react_g
+                if perc_evolve:
                     agent.params = attrs.evolve(
                         agent.params,
-                        perception=attrs.evolve(agent.params.perception, robot_repulsion_gain=gn),
+                        perception=attrs.evolve(agent.params.perception, **perc_evolve),
                     )
             self._pool_agent_ids.append(aid)
             self._mark_roster_dirty()

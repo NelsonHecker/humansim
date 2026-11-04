@@ -383,7 +383,8 @@ class SFMPlanner(LocalPlanner):
             nbr_is_robot = pool.kind[pair_nbr] == KIND_ROBOT
             if np.any(nbr_is_robot):
                 eff_strength = eff_strength.copy()
-                eff_strength[nbr_is_robot] *= pool.robot_repulsion_gain[pair_obs[nbr_is_robot]]
+                robot_pairs = pair_obs[nbr_is_robot]
+                eff_strength[nbr_is_robot] *= pool.robot_repulsion_gain[robot_pairs] * pool.robot_reaction_gain[robot_pairs]
             eff_range = rep_rng[pair_obs] * r_scale
             magnitudes = eff_strength * np.exp((r_ij - dists) / eff_range)
 
@@ -505,10 +506,11 @@ class SFMPlanner(LocalPlanner):
                 r_ij = 2.0 * agent_radius
                 eff_s = lp["repulsion_strength"] * s_scale
                 rep_gain = getattr(agent.params.perception, "robot_repulsion_gain", 1.0)
+                react_gain = getattr(agent.params.perception, "robot_reaction_gain", 1.0)
                 is_robot_nbr = nbr_cls == KIND_ROBOT
                 if np.any(is_robot_nbr):
                     eff_s = eff_s.copy()
-                    eff_s[is_robot_nbr] *= rep_gain
+                    eff_s[is_robot_nbr] *= rep_gain * react_gain
                 magnitudes = eff_s * np.exp((r_ij - dists) / (lp["repulsion_range"] * r_scale))
 
                 cos_phi = -normals[:, 0] * e_goal_x + -normals[:, 1] * e_goal_y

@@ -368,6 +368,8 @@ class SpawnRequest:
     lifetime: AgentLifetime = attrs.Factory(AgentLifetime)
     robot_awareness: float | None = None
     robot_repulsion_gain: float | None = None
+    robot_fov_gain: float | None = None
+    robot_reaction_gain: float | None = None
 
 
 @attrs.define
