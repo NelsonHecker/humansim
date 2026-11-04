@@ -28,14 +28,14 @@ Perception (`perception:`):
 
 Built-in presets for robot awareness: `blind`, `distracted`, `normal`, `interested`, `aggressive`, `scared`.
 
-### Per-Planner Capability Matrix for Robot Interaction
+### Per-planner robot interaction capability matrix
 
-| Parameter | SFM / HSFM | ORCA | Physical Meaning |
+| Parameter | SFM / HSFM | ORCA | Meaning |
 |---|---|---|---|
-| `robot_awareness` | ✅ Filtered in perception CSR | ✅ Distance cutoff when $< 1.0$ | Visibility gate: $0.0$ removes robot from perception |
-| `robot_repulsion_gain` | ✅ Force magnitude ($A$) | ✅ Perceived obstacle radius | Yielding urgency / clearance scale |
-| `robot_fov_gain` | ✅ Filtered in perception CSR | ❌ Ignored | Asymmetric FOV cone against robots |
-| `robot_reaction_gain` | ✅ Interaction range ($B$) | ❌ Ignored | Reaction distance / anticipation envelope |
+| `robot_awareness` | filtered in perception CSR | distance cutoff when < 1.0 | visibility gate: 0.0 removes robot from perception |
+| `robot_repulsion_gain` | force magnitude (A) | perceived obstacle radius | yielding urgency and clearance scale |
+| `robot_fov_gain` | filtered in perception CSR | ignored | asymmetric FOV cone against robots |
+| `robot_reaction_gain` | interaction range (B) | ignored | reaction distance and anticipation envelope |
 
 > Note: ORCA builds its private neighbor list and solves instantaneous geometric velocity obstacles; hence it consumes `robot_awareness` (to prune distant robots when $< 1.0$) and `robot_repulsion_gain` (to size non-reciprocating obstacle clearance), while `robot_fov_gain` and `robot_reaction_gain` are specific to force-based planners (`sfm`, `hsfm`).
 

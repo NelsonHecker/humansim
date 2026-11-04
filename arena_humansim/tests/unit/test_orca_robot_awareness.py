@@ -77,7 +77,7 @@ def test_orca_default_awareness_preserves_neighbor_dist(
     pool.robot_awareness[0] = 1.0
     pool.desired_vel[0] = 1.0
 
-    # Agent 2: Robot at (4.0, 0.0) — beyond vision_range (3.0m) but within ORCA neighbor_dist (5.0m)
+    # Agent 2: Robot at (4.0, 0.0) -- beyond vision_range (3.0m) but within ORCA neighbor_dist (5.0m)
     pool.add_agent(agent_factory(agent_id=2, x=4.0, y=0.0))
     pool.kind[1] = KIND_ROBOT
     pool.desired_vel[1] = 0.0
