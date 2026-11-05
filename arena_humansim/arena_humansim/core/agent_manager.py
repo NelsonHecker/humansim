@@ -1478,6 +1478,29 @@ class AgentManager(Node):
             )
         return self._build_base_agent(aid, agent_msg, list(spawn_req.waypoints))
 
+    def _apply_awareness_overrides(self, aid: int, idx: int, agent: BaseAgent) -> None:
+        if aid not in self._scenario_awareness_overrides:
+            return
+        aw, gn, fov_g, react_g = self._scenario_awareness_overrides[aid]
+        perc_evolve: dict[str, Any] = {}
+        if aw is not None:
+            self._pool.robot_awareness[idx] = aw
+            perc_evolve["robot_awareness"] = aw
+        if gn is not None:
+            self._pool.robot_repulsion_gain[idx] = gn
+            perc_evolve["robot_repulsion_gain"] = gn
+        if fov_g is not None:
+            self._pool.robot_fov_gain[idx] = fov_g
+            perc_evolve["robot_fov_gain"] = fov_g
+        if react_g is not None:
+            self._pool.robot_reaction_gain[idx] = react_g
+            perc_evolve["robot_reaction_gain"] = react_g
+        if perc_evolve:
+            agent.params = attrs.evolve(
+                agent.params,
+                perception=attrs.evolve(agent.params.perception, **perc_evolve),
+            )
+
     def _lookup_agent_name(self, name: str, kind: int | None = None) -> int | None:
         """Exact name, else the unique agent whose name ends in ``/name``, optionally restricted to one AgentState kind."""
         pool = self._pool
@@ -1535,6 +1558,7 @@ class AgentManager(Node):
         self._prone.discard(aid)
         self._parked_from.pop(aid, None)
         self._rising.pop(aid, None)
+        self._scenario_awareness_overrides.pop(aid, None)
         if aid in self._pool._id_to_idx:
             idx = self._pool._id_to_idx[aid]
             swapped_id = self._pool.swap_remove(aid)
@@ -1639,6 +1663,7 @@ class AgentManager(Node):
             agent = self._build_base_agent_from_spawn(aid, spawn_req)
             self._agents[aid] = agent
             idx = self._pool.add_agent(agent)
+            self._apply_awareness_overrides(aid, idx, agent)
             self._pool.policy_idx[idx] = self._spawn_policy_idx(aid, agent)
             self._pool_agent_ids.append(aid)
             self._mark_roster_dirty()
@@ -2883,26 +2908,7 @@ class AgentManager(Node):
             if kind == KIND_ROBOT:
                 self._pool.interaction_class[idx] = interaction_classes.ROBOT
             self._pool.policy_idx[idx] = policy_idx
-            if aid in self._scenario_awareness_overrides:
-                aw, gn, fov_g, react_g = self._scenario_awareness_overrides[aid]
-                perc_evolve: dict[str, Any] = {}
-                if aw is not None:
-                    self._pool.robot_awareness[idx] = aw
-                    perc_evolve["robot_awareness"] = aw
-                if gn is not None:
-                    self._pool.robot_repulsion_gain[idx] = gn
-                    perc_evolve["robot_repulsion_gain"] = gn
-                if fov_g is not None:
-                    self._pool.robot_fov_gain[idx] = fov_g
-                    perc_evolve["robot_fov_gain"] = fov_g
-                if react_g is not None:
-                    self._pool.robot_reaction_gain[idx] = react_g
-                    perc_evolve["robot_reaction_gain"] = react_g
-                if perc_evolve:
-                    agent.params = attrs.evolve(
-                        agent.params,
-                        perception=attrs.evolve(agent.params.perception, **perc_evolve),
-                    )
+            self._apply_awareness_overrides(aid, idx, agent)
             self._pool_agent_ids.append(aid)
             self._mark_roster_dirty()
 

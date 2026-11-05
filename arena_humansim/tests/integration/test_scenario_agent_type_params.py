@@ -89,3 +89,48 @@ def test_explicit_speed_above_the_type_max_raises_the_max(manager_factory: Calla
     for _ in range(100):
         mgr.tick()
     assert float((pool.vel[pool.idx(ROBOT)] ** 2).sum()) ** 0.5 > 1.2
+
+
+def _flow_with_awareness(tmp_path: Path) -> Path:
+    data = yaml.safe_load(_write_scenario(tmp_path / "scenario.yaml").read_text())
+    data["agents"] = []
+    data["flow"] = {
+        "sources": [
+            {
+                "shape": {"type": "circle", "radius": 0.5},
+                "type": "max",
+                "max_concurrent": 2,
+                "max_total": 2,
+                "pose": {"x": -5.0, "y": 0.0},
+                "agent_template": {"agent_type": "stroller", "robot_awareness": 0.25, "robot_repulsion_gain": 0.5, "robot_fov_gain": 1.5, "robot_reaction_gain": 0.75},
+            }
+        ],
+        "sinks": [],
+    }
+    path = tmp_path / "flow_awareness.yaml"
+    path.write_text(yaml.safe_dump(data))
+    return path
+
+
+def test_flow_spawns_take_the_template_robot_awareness(manager_factory: Callable[..., AgentManager], tmp_path: Path) -> None:
+    mgr = manager_factory(load_scenario(str(_flow_with_awareness(tmp_path))), node_name="test_flow_robot_awareness")
+    for _ in range(20):
+        mgr.tick()
+    pool = mgr._pool
+    assert len(mgr._agents) == 2
+    for aid, agent in mgr._agents.items():
+        idx = pool.idx(aid)
+        row = (pool.robot_awareness[idx], pool.robot_repulsion_gain[idx], pool.robot_fov_gain[idx], pool.robot_reaction_gain[idx])
+        assert row == pytest.approx((0.25, 0.5, 1.5, 0.75))
+        perception = agent.params.perception
+        assert (perception.robot_awareness, perception.robot_repulsion_gain, perception.robot_fov_gain, perception.robot_reaction_gain) == pytest.approx((0.25, 0.5, 1.5, 0.75))
+
+
+def test_removing_a_flow_agent_drops_its_awareness_override(manager_factory: Callable[..., AgentManager], tmp_path: Path) -> None:
+    mgr = manager_factory(load_scenario(str(_flow_with_awareness(tmp_path))), node_name="test_flow_override_removal")
+    for _ in range(20):
+        mgr.tick()
+    aids = list(mgr._agents)
+    assert set(aids) == set(mgr._scenario_awareness_overrides)
+    mgr._remove_agent(aids[0])
+    assert set(mgr._scenario_awareness_overrides) == set(aids[1:])
