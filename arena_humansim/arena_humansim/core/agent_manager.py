@@ -142,11 +142,14 @@ class ObstacleData:
     wall_segments: tuple[tuple[tuple[float, float], tuple[float, float]], ...]
 
 
+AwarenessInput = bool | float | int | str | dict[str, object] | list[object] | None
+
+
 def _resolve_awareness_tuple(
-    aware_raw: Any,
-    gain_raw: Any = None,
-    fov_gain_raw: Any = None,
-    react_gain_raw: Any = None,
+    aware_raw: AwarenessInput,
+    gain_raw: AwarenessInput = None,
+    fov_gain_raw: AwarenessInput = None,
+    react_gain_raw: AwarenessInput = None,
     robot_aware: bool | None = None,
 ) -> tuple[float | None, float | None, float | None, float | None]:
     for name, val in [

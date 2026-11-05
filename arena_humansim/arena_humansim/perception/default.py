@@ -269,8 +269,6 @@ class DefaultPerception(Perception):
         if len(all_agents) <= 1:
             return belief
 
-        omnidirectional = vision_fov >= 360.0
-        half_fov = np.radians(vision_fov * 0.5)
         heading = observer.pose.theta
         robot_awareness: float = getattr(agent.params.perception, "robot_awareness", 1.0)
         robot_fov_gain: float = getattr(agent.params.perception, "robot_fov_gain", robot_awareness)

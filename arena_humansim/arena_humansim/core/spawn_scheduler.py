@@ -1,6 +1,5 @@
 import math
 from collections.abc import Callable, Sequence
-from typing import Any
 
 import numpy as np
 
@@ -263,8 +262,11 @@ class SpawnScheduler(Loggable):
         return Pose2D(x=x, y=y, theta=0.0)
 
 
+GainSpec = bool | float | int | str | list[object] | dict[str, object] | None
+
+
 def _sample_gain_spec(
-    spec: Any,
+    spec: GainSpec,
     rng: np.random.Generator,
     slot: int,
     clip_low: float = 0.0,
@@ -326,17 +328,17 @@ def _sample_gain_spec(
     return None
 
 
-def sample_awareness_spec(spec: Any, rng: np.random.Generator) -> float | None:
+def sample_awareness_spec(spec: GainSpec, rng: np.random.Generator) -> float | None:
     return _sample_gain_spec(spec, rng, slot=0, clip_low=0.0, clip_high=1.0, field_name="awareness")
 
 
-def sample_repulsion_gain_spec(spec: Any, rng: np.random.Generator) -> float | None:
+def sample_repulsion_gain_spec(spec: GainSpec, rng: np.random.Generator) -> float | None:
     return _sample_gain_spec(spec, rng, slot=1, clip_low=0.0, clip_high=float("inf"), field_name="repulsion")
 
 
-def sample_fov_gain_spec(spec: Any, rng: np.random.Generator) -> float | None:
+def sample_fov_gain_spec(spec: GainSpec, rng: np.random.Generator) -> float | None:
     return _sample_gain_spec(spec, rng, slot=2, clip_low=0.0, clip_high=float("inf"), field_name="fov")
 
 
-def sample_reaction_gain_spec(spec: Any, rng: np.random.Generator) -> float | None:
+def sample_reaction_gain_spec(spec: GainSpec, rng: np.random.Generator) -> float | None:
     return _sample_gain_spec(spec, rng, slot=3, clip_low=0.05, clip_high=float("inf"), field_name="reaction")
