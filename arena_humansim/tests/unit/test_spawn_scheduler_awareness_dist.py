@@ -62,6 +62,9 @@ def test_sample_awareness_validation() -> None:
     with pytest.raises(ValueError, match="Mixture weights must be non-negative"):
         sample_awareness_spec({"blind": -0.5, "normal": 0.5}, rng)
 
+    with pytest.raises(ValueError, match="must be a number"):
+        sample_awareness_spec({"mean": [0.5]}, rng)
+
     # List of names without weights dicts
     list_spec = ["blind", "normal"]
     res = sample_awareness_spec(list_spec, rng)

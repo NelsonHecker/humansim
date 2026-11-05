@@ -262,7 +262,13 @@ class SpawnScheduler(Loggable):
         return Pose2D(x=x, y=y, theta=0.0)
 
 
-GainSpec = bool | float | int | str | list[object] | dict[str, object] | None
+type GainSpec = bool | float | int | str | list[GainSpec] | dict[str, GainSpec] | None
+
+
+def _as_float(value: GainSpec, key: str) -> float:
+    if isinstance(value, (int, float, str)):
+        return float(value)
+    raise ValueError(f"gain spec field {key!r} must be a number, got {value!r}")
 
 
 def _sample_gain_spec(
@@ -295,7 +301,7 @@ def _sample_gain_spec(
         weights_list: list[float] = []
         for item in spec:
             if isinstance(item, dict):
-                weights_list.append(float(item.get("weight", 1.0)))
+                weights_list.append(_as_float(item.get("weight", 1.0), "weight"))
             else:
                 weights_list.append(1.0)
         weights = np.array(weights_list, dtype=np.float64)
@@ -310,16 +316,16 @@ def _sample_gain_spec(
         return _sample_gain_spec(val, rng, slot, clip_low, clip_high, field_name)
     if isinstance(spec, dict):
         if "mean" in spec:
-            mean = float(spec["mean"])
-            std = float(spec.get("std", 0.0))
-            low = float(spec.get("clip_low", clip_low))
-            high = float(spec.get("clip_high", clip_high))
+            mean = _as_float(spec["mean"], "mean")
+            std = _as_float(spec.get("std", 0.0), "std")
+            low = _as_float(spec.get("clip_low", clip_low), "clip_low")
+            high = _as_float(spec.get("clip_high", clip_high), "clip_high")
             val = float(rng.normal(mean, std)) if std > 0.0 else mean
             return float(np.clip(val, low, high))
         if "mixture" in spec and isinstance(spec["mixture"], list):
             return _sample_gain_spec(spec["mixture"], rng, slot, clip_low, clip_high, field_name)
         keys = list(spec.keys())
-        weights = np.array([float(spec[k]) for k in keys], dtype=np.float64)
+        weights = np.array([_as_float(spec[k], k) for k in keys], dtype=np.float64)
         if np.any(weights < 0.0) or weights.sum() <= 0.0:
             raise ValueError(f"Mixture weights must be non-negative and sum > 0, got {weights}")
         weights /= weights.sum()
