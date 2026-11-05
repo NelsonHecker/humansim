@@ -7,6 +7,7 @@ from tests.ros._helpers import (
     ResetSimulation,
     RosTestSystem,
     SpawnAgents,
+    make_agent_msg,
     make_remove_request,
     make_reset_request,
     make_spawn_request,
@@ -51,6 +52,34 @@ def test_reset_reseeds_ids(system: RosTestSystem) -> None:
     second_ids = list(second.spawned_ids)
 
     assert first_ids == second_ids
+
+
+def _named_params(system: RosTestSystem, *names: str) -> dict[str, object]:
+    msgs = []
+    for name in names:
+        msg = make_agent_msg()
+        msg.name = name
+        msgs.append(msg)
+    resp = system.call(SpawnAgents, "spawn_agents", SpawnAgents.Request(agents=msgs))
+    assert resp.success
+    return {name: system.manager._agents[aid].params for name, aid in zip(names, resp.spawned_ids, strict=True)}
+
+
+def test_remove_all_gives_the_next_crowd_fresh_streams(system: RosTestSystem) -> None:
+    system.call(RemoveAgents, "remove_agents", make_remove_request([]))
+    first = _named_params(system, "p")
+    system.call(RemoveAgents, "remove_agents", make_remove_request([]))
+    assert _named_params(system, "p") == first
+
+
+def test_named_agents_draw_by_name_whatever_their_id(system: RosTestSystem) -> None:
+    system.call(RemoveAgents, "remove_agents", make_remove_request([]))
+    first = _named_params(system, "env_0/p", "env_0/q")
+    system.call(RemoveAgents, "remove_agents", make_remove_request([]))
+    swapped = _named_params(system, "env_1/q", "env_1/p")
+    assert swapped["env_1/q"] == first["env_0/q"]
+    assert swapped["env_1/p"] == first["env_0/p"]
+    assert first["env_0/p"] != first["env_0/q"]
 
 
 def test_reset_deterministic_trajectory(system: RosTestSystem) -> None:
