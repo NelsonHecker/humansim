@@ -87,9 +87,10 @@ class DefaultPerception(Perception):
             r_fov, c_fov = np.nonzero(fov_pairs)
             if len(r_fov) > 0:
                 heading = pool.theta[:n]
-                cos_half = np.cos(np.radians(vision_fov * 0.5))
+                pair_fov = _pair_fov(pool, r_fov, c_fov)
+                cos_half = np.cos(np.radians(np.clip(pair_fov, 0.0, 360.0) * 0.5))
                 dot = diff[r_fov, c_fov, 0] * np.cos(heading)[r_fov] + diff[r_fov, c_fov, 1] * np.sin(heading)[r_fov]
-                outside = dot < dists[r_fov, c_fov] * cos_half[r_fov]
+                outside = (pair_fov < 360.0) & (dot < dists[r_fov, c_fov] * cos_half)
                 mask[r_fov[outside], c_fov[outside]] = False
 
         if prox_mask is not None:
@@ -184,12 +185,13 @@ class DefaultPerception(Perception):
             heading = pool.theta[:n]
             hx = np.cos(heading)
             hy = np.sin(heading)
-            cos_half = np.cos(np.radians(vision_fov * 0.5))
             r_fov = row[fov_idx]
             c_fov = col[fov_idx]
+            pair_fov = _pair_fov(pool, r_fov, c_fov)
+            cos_half = np.cos(np.radians(np.clip(pair_fov, 0.0, 360.0) * 0.5))
             dx = positions[c_fov, 0] - positions[r_fov, 0]
             dy = positions[c_fov, 1] - positions[r_fov, 1]
-            outside = dx * hx[r_fov] + dy * hy[r_fov] < dist[fov_idx] * cos_half[r_fov]
+            outside = (pair_fov < 360.0) & (dx * hx[r_fov] + dy * hy[r_fov] < dist[fov_idx] * cos_half)
             keep[fov_idx[outside]] = False
 
         if self._occluder is not None:
@@ -312,6 +314,11 @@ class DefaultPerception(Perception):
             belief.observed_agents.append(all_agents[nid])
 
         return belief
+
+
+def _pair_fov(pool: AgentPool, rows: np.ndarray, cols: np.ndarray) -> np.ndarray:
+    robot_target = (pool.kind[cols] == KIND_ROBOT) & (pool.kind[rows] != KIND_ROBOT)
+    return pool.vision_fov[rows] * np.where(robot_target, pool.robot_fov_gain[rows], 1.0)
 
 
 def _wrap_angle(angle: float) -> float:

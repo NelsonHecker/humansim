@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 import numpy as np
+import pytest
 
 from arena_humansim.core.agents.base import BaseAgent
 from arena_humansim.core.pool import KIND_HUMAN, KIND_ROBOT, AgentPool
@@ -175,3 +176,34 @@ def test_all_human_crowd_invariant(pool_empty: Callable[..., AgentPool], agent_f
 
     np.testing.assert_array_equal(pool_normal.neighbor_indptr, pool_blind.neighbor_indptr)
     np.testing.assert_array_equal(pool_normal.neighbor_indices, pool_blind.neighbor_indices)
+
+
+def _neighbors(pool: AgentPool, i: int) -> list[int]:
+    return list(pool.neighbor_indices[int(pool.neighbor_indptr[i]) : int(pool.neighbor_indptr[i + 1])])
+
+
+def _add_far_humans(pool: AgentPool, agent_factory: Callable[..., BaseAgent], count: int) -> None:
+    for k in range(count):
+        pool.add_agent(agent_factory(agent_id=100 + k, x=1000.0 + 10.0 * k, y=1000.0))
+        pool.kind[pool.n - 1] = KIND_HUMAN
+
+
+@pytest.mark.parametrize("far_humans", [0, 70], ids=["dense", "kdtree"])
+def test_robot_fov_gain_above_one_widens_the_cone_for_robots_only(pool_empty: Callable[..., AgentPool], agent_factory: Callable[..., BaseAgent], far_humans: int) -> None:
+    pool = pool_empty(capacity=96)
+    pool.add_agent(agent_factory(agent_id=1, x=0.0, y=0.0))
+    pool.kind[0] = KIND_HUMAN
+    pool.vision_range[0] = 5.0
+    pool.vision_fov[0] = 90.0
+    pool.proximity_sense[0] = 0.5
+    pool.robot_awareness[0] = 1.0
+    pool.robot_fov_gain[0] = 2.0
+    pool.add_agent(agent_factory(agent_id=2, x=0.5, y=2.0))
+    pool.kind[1] = KIND_ROBOT
+    pool.add_agent(agent_factory(agent_id=3, x=0.5, y=2.0))
+    pool.kind[2] = KIND_HUMAN
+    _add_far_humans(pool, agent_factory, far_humans)
+
+    DefaultPerception().compute_pool(pool)
+
+    assert _neighbors(pool, 0) == [1]
