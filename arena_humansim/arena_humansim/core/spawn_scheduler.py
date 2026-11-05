@@ -169,8 +169,8 @@ class SpawnScheduler(Loggable):
 
         awareness_spec = tmpl.robot_awareness
         repulsion_spec = tmpl.robot_repulsion_gain
-        fov_spec = getattr(tmpl, "robot_fov_gain", None)
-        reaction_spec = getattr(tmpl, "robot_reaction_gain", None)
+        fov_spec = tmpl.robot_fov_gain
+        reaction_spec = tmpl.robot_reaction_gain
 
         if isinstance(awareness_spec, str) and awareness_spec.strip().lower() in AWARENESS_PRESETS:
             preset_tuple = AWARENESS_PRESETS[awareness_spec.strip().lower()]

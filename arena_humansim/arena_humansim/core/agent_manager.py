@@ -1215,12 +1215,12 @@ class AgentManager(Node):
         for a in scenario.agents:
             if int(a.agent_id) == 0:
                 a.agent_id = self._allocate_robot_id() if int(a.kind) == int(AgentKind.ROBOT) else self._allocate_agent_id()
-            if any(v is not None for v in (a.robot_aware, a.robot_awareness, a.robot_repulsion_gain, getattr(a, "robot_fov_gain", None), getattr(a, "robot_reaction_gain", None))):
+            if any(v is not None for v in (a.robot_aware, a.robot_awareness, a.robot_repulsion_gain, a.robot_fov_gain, a.robot_reaction_gain)):
                 aw, gn, fov_g, react_g = _resolve_awareness_tuple(
                     a.robot_awareness,
                     a.robot_repulsion_gain,
-                    getattr(a, "robot_fov_gain", None),
-                    getattr(a, "robot_reaction_gain", None),
+                    a.robot_fov_gain,
+                    a.robot_reaction_gain,
                     robot_aware=a.robot_aware,
                 )
                 self._scenario_awareness_overrides[int(a.agent_id)] = (aw, gn, fov_g, react_g)
@@ -1469,12 +1469,12 @@ class AgentManager(Node):
         agent_msg.desired_velocity = spawn_req.desired_velocity
         agent_msg.radius = spawn_req.agent_radius
         agent_msg.agent_type = spawn_req.agent_type
-        if any(v is not None for v in (spawn_req.robot_awareness, spawn_req.robot_repulsion_gain, getattr(spawn_req, "robot_fov_gain", None), getattr(spawn_req, "robot_reaction_gain", None))):
+        if any(v is not None for v in (spawn_req.robot_awareness, spawn_req.robot_repulsion_gain, spawn_req.robot_fov_gain, spawn_req.robot_reaction_gain)):
             self._scenario_awareness_overrides[aid] = (
                 spawn_req.robot_awareness,
                 spawn_req.robot_repulsion_gain,
-                getattr(spawn_req, "robot_fov_gain", None),
-                getattr(spawn_req, "robot_reaction_gain", None),
+                spawn_req.robot_fov_gain,
+                spawn_req.robot_reaction_gain,
             )
         return self._build_base_agent(aid, agent_msg, list(spawn_req.waypoints))
 

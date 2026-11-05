@@ -509,8 +509,8 @@ class SFMPlanner(LocalPlanner):
                 r_ij = 2.0 * agent_radius
                 eff_s = lp["repulsion_strength"] * s_scale
                 eff_r = lp["repulsion_range"] * r_scale
-                rep_gain = getattr(agent.params.perception, "robot_repulsion_gain", 1.0)
-                react_gain = getattr(agent.params.perception, "robot_reaction_gain", 1.0)
+                rep_gain = agent.params.perception.robot_repulsion_gain
+                react_gain = agent.params.perception.robot_reaction_gain
                 is_robot_nbr = nbr_cls == KIND_ROBOT
                 if np.any(is_robot_nbr):
                     eff_s = eff_s.copy()

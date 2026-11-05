@@ -173,8 +173,8 @@ class AgentPool:
         self.vision_occlusion[i] = perc.vision_occlusion
         self.robot_awareness[i] = perc.robot_awareness
         self.robot_repulsion_gain[i] = perc.robot_repulsion_gain
-        self.robot_fov_gain[i] = getattr(perc, "robot_fov_gain", perc.robot_awareness)
-        self.robot_reaction_gain[i] = getattr(perc, "robot_reaction_gain", 1.0)
+        self.robot_fov_gain[i] = perc.robot_fov_gain
+        self.robot_reaction_gain[i] = perc.robot_reaction_gain
 
     def swap_remove(self, agent_id: int) -> int | None:
         idx = self._id_to_idx.pop(agent_id)

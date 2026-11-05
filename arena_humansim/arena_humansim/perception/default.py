@@ -273,8 +273,8 @@ class DefaultPerception(Perception):
             return belief
 
         heading = observer.pose.theta
-        robot_awareness: float = getattr(agent.params.perception, "robot_awareness", 1.0)
-        robot_fov_gain: float = getattr(agent.params.perception, "robot_fov_gain", robot_awareness)
+        robot_awareness: float = agent.params.perception.robot_awareness
+        robot_fov_gain: float = agent.params.perception.robot_fov_gain
 
         query_radius = max(vision_range, proximity_sense)
         neighbor_indices = self._shared_tree.query_ball_point([ox, oy], query_radius)
@@ -284,7 +284,7 @@ class DefaultPerception(Perception):
             nid = self._shared_ids[idx]
             if nid == agent_id:
                 continue
-            nbr_is_robot = getattr(all_agents[nid], "kind", 0) == KIND_ROBOT
+            nbr_is_robot = all_agents[nid].kind == KIND_ROBOT
             if nbr_is_robot and robot_awareness <= 0.0:
                 continue
             eff_range = vision_range * robot_awareness if nbr_is_robot else vision_range
