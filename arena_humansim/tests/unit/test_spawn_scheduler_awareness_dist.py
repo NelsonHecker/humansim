@@ -51,6 +51,14 @@ def test_sample_awareness_continuous_distribution() -> None:
     assert abs(float(samples.mean()) - 0.7) < 0.02
 
 
+def test_sample_awareness_mixture_item_distribution() -> None:
+    rng = np.random.default_rng(321)
+    spec = [{"weight": 1, "mean": 0.5, "std": 0.0}]
+
+    assert sample_awareness_spec(spec, rng) == 0.5
+    assert sample_awareness_spec([{"weight": 1, "mean": 0.7, "std": 0.1, "clip_low": 0.2, "clip_high": 0.9}], rng) is not None
+
+
 def test_sample_awareness_validation() -> None:
     import pytest
 

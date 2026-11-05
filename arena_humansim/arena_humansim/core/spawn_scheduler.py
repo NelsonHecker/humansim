@@ -310,7 +310,7 @@ def _sample_gain_spec(
         weights /= weights.sum()
         chosen = spec[int(rng.choice(len(spec), p=weights))]
         if isinstance(chosen, dict):
-            val = chosen.get("value", chosen.get("preset"))
+            val = chosen if "mean" in chosen else chosen.get("value", chosen.get("preset"))
         else:
             val = chosen
         return _sample_gain_spec(val, rng, slot, clip_low, clip_high, field_name)
