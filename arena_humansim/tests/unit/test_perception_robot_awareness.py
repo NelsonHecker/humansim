@@ -189,6 +189,24 @@ def _add_far_humans(pool: AgentPool, agent_factory: Callable[..., BaseAgent], co
 
 
 @pytest.mark.parametrize("far_humans", [0, 70], ids=["dense", "kdtree"])
+def test_constricted_robot_range_applies_to_every_robot(pool_empty: Callable[..., AgentPool], agent_factory: Callable[..., BaseAgent], far_humans: int) -> None:
+    pool = pool_empty(capacity=96)
+    pool.add_agent(agent_factory(agent_id=1, x=0.0, y=0.0))
+    pool.kind[0] = KIND_HUMAN
+    pool.vision_range[0] = 5.0
+    pool.proximity_sense[0] = 0.5
+    pool.robot_awareness[0] = 0.5
+    for aid, x in ((2, 1.0), (3, 4.0)):
+        pool.add_agent(agent_factory(agent_id=aid, x=x, y=0.0))
+        pool.kind[pool.n - 1] = KIND_ROBOT
+    _add_far_humans(pool, agent_factory, far_humans)
+
+    DefaultPerception().compute_pool(pool)
+
+    assert _neighbors(pool, 0) == [1]
+
+
+@pytest.mark.parametrize("far_humans", [0, 70], ids=["dense", "kdtree"])
 def test_robot_fov_gain_above_one_widens_the_cone_for_robots_only(pool_empty: Callable[..., AgentPool], agent_factory: Callable[..., BaseAgent], far_humans: int) -> None:
     pool = pool_empty(capacity=96)
     pool.add_agent(agent_factory(agent_id=1, x=0.0, y=0.0))

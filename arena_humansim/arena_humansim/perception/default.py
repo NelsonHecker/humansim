@@ -116,6 +116,7 @@ class DefaultPerception(Perception):
 
                 fov_gain = pool.robot_fov_gain[human_rows, None]
                 partial = ((awareness > 0.0) & (awareness < 1.0)) | (fov_gain != 1.0)
+                partial = np.broadcast_to(partial, (len(human_rows), len(robot_cols)))
                 if np.any(partial):
                     p_rows, p_cols = np.nonzero(partial)
                     orig_r = human_rows[p_rows]
