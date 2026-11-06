@@ -37,6 +37,14 @@ On top of the range + FOV gate, every agent always perceives neighbors within it
 
 Both paths must produce **bitwise-identical** CSRs for the same state. The contract test `tests/contracts/test_perception_contract.py` enforces this. Note the bearing convention: target-observer (`dx = target.x - observer.x`). The dense path had this inverted and was fixed on 2026-04-15 - do not re-invert without updating both paths.
 
+## Robot Awareness Gating
+
+When robots (`KIND_ROBOT`) are present in the simulation pool, human-to-robot perception edges are modulated by the observer's `robot_awareness` and `robot_fov_gain`:
+- `robot_awareness == 0.0` completely strips robots from the observer's neighbor list, including inside `proximity_sense`. Human-to-human perception edges remain 100% active.
+- `robot_awareness < 1.0` scales both `vision_range` and `proximity_sense` when detecting robots.
+- `robot_fov_gain` modulates the effective horizontal FOV for robot detection (`eff_fov = vision_fov * robot_fov_gain`), enabling narrow tunnel vision (< 1.0) or hyper-vigilant scanning (> 1.0). Angles >= 360 deg are omnidirectional.
+- Both dense and KD-tree paths implement bitwise-equivalent perception gating.
+
 ## Adding a perception module
 
 1. Subclass `Perception` in a new file under `perception/`.

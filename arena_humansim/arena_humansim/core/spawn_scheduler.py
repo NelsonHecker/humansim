@@ -3,6 +3,7 @@ from collections.abc import Callable, Sequence
 
 import numpy as np
 
+from arena_humansim.core.agents.types import AWARENESS_PRESETS
 from arena_humansim.utils.loggable import Loggable
 from arena_humansim.utils.rng import RNG, derive_seed
 from arena_humansim.utils.types import AgentLifetime, Pose2D, RateKeyframe, Shape, ShapeType, SinkConfig, SourceConfig, SourceType, SpawnRequest
@@ -162,6 +163,35 @@ class SpawnScheduler(Loggable):
             target_sink_name=target_sink_name,
         )
 
+        preset_tuple = None
+        if tmpl.robot_aware is not None:
+            preset_tuple = AWARENESS_PRESETS["normal"] if tmpl.robot_aware else AWARENESS_PRESETS["blind"]
+
+        awareness_spec = tmpl.robot_awareness
+        repulsion_spec = tmpl.robot_repulsion_gain
+        fov_spec = tmpl.robot_fov_gain
+        reaction_spec = tmpl.robot_reaction_gain
+
+        if isinstance(awareness_spec, str) and awareness_spec.strip().lower() in AWARENESS_PRESETS:
+            preset_tuple = AWARENESS_PRESETS[awareness_spec.strip().lower()]
+            awareness_spec = preset_tuple[0]
+
+        robot_awareness = sample_awareness_spec(awareness_spec, rng)
+        if robot_awareness is None and preset_tuple is not None:
+            robot_awareness = preset_tuple[0]
+
+        robot_repulsion_gain = sample_repulsion_gain_spec(repulsion_spec, rng)
+        if robot_repulsion_gain is None and preset_tuple is not None:
+            robot_repulsion_gain = preset_tuple[1]
+
+        robot_fov_gain = sample_fov_gain_spec(fov_spec, rng)
+        if robot_fov_gain is None and preset_tuple is not None:
+            robot_fov_gain = preset_tuple[2]
+
+        robot_reaction_gain = sample_reaction_gain_spec(reaction_spec, rng)
+        if robot_reaction_gain is None and preset_tuple is not None:
+            robot_reaction_gain = preset_tuple[3]
+
         return SpawnRequest(
             pose=pose,
             desired_velocity=desired_velocity,
@@ -169,6 +199,10 @@ class SpawnScheduler(Loggable):
             agent_type=tmpl.agent_type,
             waypoints=waypoints,
             lifetime=lifetime,
+            robot_awareness=robot_awareness,
+            robot_repulsion_gain=robot_repulsion_gain,
+            robot_fov_gain=robot_fov_gain,
+            robot_reaction_gain=robot_reaction_gain,
         )
 
     def _sample_pose_in_shape(self, center: Pose2D, shape: Shape, rng: np.random.Generator | None = None) -> Pose2D:
@@ -226,3 +260,91 @@ class SpawnScheduler(Loggable):
         x = center.x + w * a.x + u * b.x + v * c.x
         y = center.y + w * a.y + u * b.y + v * c.y
         return Pose2D(x=x, y=y, theta=0.0)
+
+
+type GainSpec = bool | float | int | str | list[GainSpec] | dict[str, GainSpec] | None
+
+
+def _as_float(value: GainSpec, key: str) -> float:
+    if isinstance(value, (int, float, str)):
+        return float(value)
+    raise ValueError(f"gain spec field {key!r} must be a number, got {value!r}")
+
+
+def _sample_gain_spec(
+    spec: GainSpec,
+    rng: np.random.Generator,
+    slot: int,
+    clip_low: float = 0.0,
+    clip_high: float = float("inf"),
+    field_name: str = "gain",
+) -> float | None:
+    """Sample continuous robot gain from a constant, preset, mixture, or distribution."""
+    if spec is None:
+        return None
+    if isinstance(spec, bool):
+        preset = AWARENESS_PRESETS["normal"] if spec else AWARENESS_PRESETS["blind"]
+        return preset[slot]
+    if isinstance(spec, (int, float)):
+        return float(np.clip(float(spec), clip_low, clip_high))
+    if isinstance(spec, str):
+        key = spec.strip().lower()
+        if key in AWARENESS_PRESETS:
+            return AWARENESS_PRESETS[key][slot]
+        try:
+            return float(np.clip(float(key), clip_low, clip_high))
+        except ValueError:
+            raise ValueError(f"Unknown {field_name} preset {spec!r}; valid presets: {', '.join(sorted(AWARENESS_PRESETS))}") from None
+    if isinstance(spec, list):
+        if not spec:
+            return None
+        weights_list: list[float] = []
+        for item in spec:
+            if isinstance(item, dict):
+                weights_list.append(_as_float(item.get("weight", 1.0), "weight"))
+            else:
+                weights_list.append(1.0)
+        weights = np.array(weights_list, dtype=np.float64)
+        if np.any(weights < 0.0) or weights.sum() <= 0.0:
+            raise ValueError(f"Mixture weights must be non-negative and sum > 0, got {weights}")
+        weights /= weights.sum()
+        chosen = spec[int(rng.choice(len(spec), p=weights))]
+        if isinstance(chosen, dict):
+            val = chosen if "mean" in chosen else chosen.get("value", chosen.get("preset"))
+        else:
+            val = chosen
+        return _sample_gain_spec(val, rng, slot, clip_low, clip_high, field_name)
+    if isinstance(spec, dict):
+        if "mean" in spec:
+            mean = _as_float(spec["mean"], "mean")
+            std = _as_float(spec.get("std", 0.0), "std")
+            low = _as_float(spec.get("clip_low", clip_low), "clip_low")
+            high = _as_float(spec.get("clip_high", clip_high), "clip_high")
+            val = float(rng.normal(mean, std)) if std > 0.0 else mean
+            return float(np.clip(val, low, high))
+        if "mixture" in spec and isinstance(spec["mixture"], list):
+            return _sample_gain_spec(spec["mixture"], rng, slot, clip_low, clip_high, field_name)
+        keys = list(spec.keys())
+        weights = np.array([_as_float(spec[k], k) for k in keys], dtype=np.float64)
+        if np.any(weights < 0.0) or weights.sum() <= 0.0:
+            raise ValueError(f"Mixture weights must be non-negative and sum > 0, got {weights}")
+        weights /= weights.sum()
+        chosen = keys[int(rng.choice(len(keys), p=weights))]
+        return _sample_gain_spec(chosen, rng, slot, clip_low, clip_high, field_name)
+    return None
+
+
+def sample_awareness_spec(spec: GainSpec, rng: np.random.Generator) -> float | None:
+    return _sample_gain_spec(spec, rng, slot=0, clip_low=0.0, clip_high=1.0, field_name="awareness")
+
+
+def sample_repulsion_gain_spec(spec: GainSpec, rng: np.random.Generator) -> float | None:
+    return _sample_gain_spec(spec, rng, slot=1, clip_low=0.0, clip_high=float("inf"), field_name="repulsion")
+
+
+def sample_fov_gain_spec(spec: GainSpec, rng: np.random.Generator) -> float | None:
+    return _sample_gain_spec(spec, rng, slot=2, clip_low=0.0, clip_high=float("inf"), field_name="fov")
+
+
+def sample_reaction_gain_spec(spec: GainSpec, rng: np.random.Generator) -> float | None:
+    return _sample_gain_spec(spec, rng, slot=3, clip_low=0.05, clip_high=float("inf"), field_name="reaction")

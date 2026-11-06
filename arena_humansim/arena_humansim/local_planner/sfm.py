@@ -11,6 +11,7 @@ from numba import njit, prange
 from arena_humansim.core import interaction_classes
 from arena_humansim.core.agents import BaseAgent
 from arena_humansim.core.agents.types import ParamDist
+from arena_humansim.core.pool import KIND_ROBOT
 from arena_humansim.utils.types import Pose2D, Segments
 from arena_humansim.utils.wall_grid import WallGrid, query_walls
 
@@ -380,6 +381,14 @@ class SFMPlanner(LocalPlanner):
             r_ij = radii[pair_obs] + radii[pair_nbr]
             eff_strength = rep_str[pair_obs] * s_scale
             eff_range = rep_rng[pair_obs] * r_scale
+            nbr_is_robot = pool.kind[pair_nbr] == KIND_ROBOT
+            if np.any(nbr_is_robot):
+                eff_strength = eff_strength.copy()
+                eff_range = eff_range.copy()
+                robot_pairs = pair_obs[nbr_is_robot]
+                eff_strength[nbr_is_robot] *= pool.robot_repulsion_gain[robot_pairs]
+                eff_range[nbr_is_robot] *= pool.robot_reaction_gain[robot_pairs]
+            eff_range = np.maximum(eff_range, 1e-4)
             magnitudes = eff_strength * np.exp((r_ij - dists) / eff_range)
 
             lam = aniso[pair_obs]
@@ -498,7 +507,18 @@ class SFMPlanner(LocalPlanner):
                 r_scale = self._gain_range_scale[obs_cls, nbr_cls]
 
                 r_ij = 2.0 * agent_radius
-                magnitudes = (lp["repulsion_strength"] * s_scale) * np.exp((r_ij - dists) / (lp["repulsion_range"] * r_scale))
+                eff_s = lp["repulsion_strength"] * s_scale
+                eff_r = lp["repulsion_range"] * r_scale
+                rep_gain = agent.params.perception.robot_repulsion_gain
+                react_gain = agent.params.perception.robot_reaction_gain
+                is_robot_nbr = nbr_cls == KIND_ROBOT
+                if np.any(is_robot_nbr):
+                    eff_s = eff_s.copy()
+                    eff_r = eff_r.copy()
+                    eff_s[is_robot_nbr] *= rep_gain
+                    eff_r[is_robot_nbr] *= react_gain
+                eff_r = np.maximum(eff_r, 1e-4)
+                magnitudes = eff_s * np.exp((r_ij - dists) / eff_r)
 
                 cos_phi = -normals[:, 0] * e_goal_x + -normals[:, 1] * e_goal_y
                 w = lp["anisotropy"] + (1.0 - lp["anisotropy"]) * 0.5 * (1.0 + cos_phi)
