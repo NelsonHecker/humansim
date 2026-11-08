@@ -159,14 +159,14 @@ def generate_launch_description():
 
     arguments = [
         DeclareLaunchArgument("namespace", default_value="arena_humansim", description="node namespace"),
-        DeclareLaunchArgument("mode", default_value="master", choices=["master", "subsystem"]),
-        DeclareLaunchArgument("use_sim_time", default_value="true"),
+        DeclareLaunchArgument("mode", default_value="master", choices=["master", "subsystem"], description="master owns /clock and ticks on a wall timer, subsystem ticks on /clock"),
+        DeclareLaunchArgument("use_sim_time", default_value="true", description="use the /clock topic as the time source of the launched nodes"),
         DeclareLaunchArgument("markers", default_value="0", description="0=off, 1=basic, 2=full"),
         DeclareLaunchArgument("rviz", default_value="", description="true = default config, false = off, path = custom config (empty = auto: off if markers=0 else on)"),
         DeclareLaunchArgument("record", default_value="false", description="record scenario to rosbag"),
         DeclareLaunchArgument("record_dir", default_value="", description="output dir (empty = ./recordings/<ts>[_<scenario>]/ relative to cwd)"),
         DeclareLaunchArgument("render", default_value="true", description="render video after node exits"),
-        DeclareLaunchArgument("render_format", default_value="mp4", choices=["mp4", "gif"]),
+        DeclareLaunchArgument("render_format", default_value="mp4", choices=["mp4", "gif"], description="video format of the rendered recording"),
         DeclareLaunchArgument("scenario", default_value="", description="scenario name or absolute YAML path (master mode only)"),
         DeclareLaunchArgument("ticks", default_value="0", description="stop after N ticks (0 = run until Ctrl-C)"),
         DeclareLaunchArgument("time", default_value="0.0", description="stop after N seconds of sim time (ignored if ticks is set)"),

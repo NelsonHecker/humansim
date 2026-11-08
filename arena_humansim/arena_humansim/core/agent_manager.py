@@ -54,11 +54,12 @@ from arena_humansim_msgs.srv import (
     TeleportAgents,
     UpdateRobot,
 )
+from arena_rclpy_mixins.params import Choices, Param, Range, declare
 from geometry_msgs.msg import Point32, Vector3
 from geometry_msgs.msg import Pose2D as Pose2DMsg
 from py_trees.common import Status
 from py_trees.trees import BehaviourTree
-from rcl_interfaces.msg import FloatingPointRange, IntegerRange, ParameterDescriptor, SetParametersResult
+from rcl_interfaces.msg import SetParametersResult
 from rclpy.clock import Clock as RclClock
 from rclpy.clock import ClockType
 from rclpy.node import Node
@@ -87,7 +88,7 @@ from arena_humansim.core.behavior.compiler import BehaviorTreeFactory
 from arena_humansim.core.despawn_monitor import DespawnMonitor
 from arena_humansim.core.formation.clearance import Clearance
 from arena_humansim.core.interaction_kinds import InteractionType, MembershipRole
-from arena_humansim.core.interaction_manager import CONTACT_ENABLED, DEFAULT_STANDING_DISTANCE, GESTURE_ENABLED, InteractionEdge, InteractionManager, InteractionRow, check_gesture_mode
+from arena_humansim.core.interaction_manager import CONTACT_ENABLED, CONTACT_MODES, DEFAULT_STANDING_DISTANCE, GESTURE_ENABLED, GESTURE_MODES, InteractionEdge, InteractionManager, InteractionRow, check_gesture_mode
 from arena_humansim.core.locomotion import LocomotionExtension
 from arena_humansim.core.logger import SimulationLogger
 from arena_humansim.core.pool import KIND_ROBOT, AgentPool, PoolAware
@@ -423,59 +424,51 @@ class AgentManager(Node):
         Loggable.init_logging(self)
 
         inherited = set(self.list_parameters([], 0).names)
-        self.declare_parameter("seed", 0)
-        self.declare_parameter("dt", 0.05)
-        self.declare_parameter("bt_tick_interval", 5, ParameterDescriptor(integer_range=[IntegerRange(from_value=1, to_value=100000)]))
-        self.declare_parameter("perception", "default")
-        self.declare_parameter("global_planner", "navmesh")
-        self.declare_parameter(
-            "global_planner.inflation_radius",
-            0.38,
-            ParameterDescriptor(description="wall clearance of planned paths [m], rounded up to whole cells", floating_point_range=[FloatingPointRange(from_value=0.0, to_value=5.0)]),
+        decls = (
+            Param[int]("seed", 0, "Random seed of the simulation RNG."),
+            Param[float]("dt", 0.05, "Simulation timestep in seconds."),
+            Param[int]("bt_tick_interval", 5, "Behavior trees tick once every N sim ticks.", constraint=Range(1, 100000)),
+            Param[str]("perception", "default", "Perception module name."),
+            Param[str]("global_planner", "navmesh", "Global planner module name."),
+            Param[float]("global_planner.inflation_radius", 0.38, "Wall clearance of planned paths in meters, rounded up to whole cells.", constraint=Range(0.0, 5.0)),
+            Param[float]("global_planner.resolution", 0.2, "Planning grid cell size in meters.", constraint=Range(0.01, 5.0)),
+            Param[float]("global_planner.comfort_radius", 0.6, "Preferred wall clearance of navmesh paths in meters, relaxed in narrow passages.", constraint=Range(0.0, 5.0)),
+            Param[str]("local_planner", "sfm", "Default local planner module name."),
+            Param[bool]("force_local_planner", False, "Force every agent, humans and robots, onto local_planner and ignore the per-agent policy of the scenario."),
+            Param[str]("robot_policy", "", "Policy that replaces the policy of every robot-kind agent at scenario load (empty = keep the scenario policy)."),
+            Param[str]("robot_shutdown", "", "End the sim once every robot latched on its final waypoint: true or false overrides the scenario, empty = use the scenario value."),
+            Param[str]("force_waypoint_mode", "", "Waypoint mode (once, repeat, reverse, random) that replaces the one of every human scenario agent at load (empty = keep the scenario value)."),
+            Param[str]("animation", "noop", "Animation module name."),
+            Param[str]("collision", "wall_projection", "Collision resolver module name."),
+            Param[str]("occlusion", "bitmap", "Occlusion module name."),
+            Param[str]("mode", self.MODE_MASTER, "master owns /clock and ticks on a wall timer, subsystem ticks on /clock.", constraint=Choices(self.MODE_MASTER, self.MODE_SUBSYSTEM)),
+            Param[str]("log_dir", "", "Directory for simulation replay logs (empty = no logging)."),
+            Param[str]("replay_mode", "", "Replay log to load and play back (empty = no replay)."),
+            Param[float]("waypoint_threshold", 0.1, "Distance in meters at which a waypoint counts as reached."),
+            Param[float]("min_speed_for_heading", 0.1, "Speed in m/s below which an agent keeps its heading."),
+            Param[float]("arrival_r_enter", 0.15, "Radius in meters at which an agent latches onto its goal, must be positive and below arrival_r_exit."),
+            Param[float]("arrival_r_exit", 0.30, "Radius in meters at which a latched agent releases its goal."),
+            Param[float]("arrival_tau_brake", 0.15, "Braking time constant in seconds of a latched agent, at least dt."),
+            Param[float]("zone_wait_timeout", 30.0, "Sim seconds after reaching a teleport zone's wait pose or taking a spot before a rider not yet teleported leaves the zone and is routed again."),
+            Param[float]("zone_let_out_timeout", 10.0, "Sim seconds of an open zone that a waiting rider leaves to those getting out before it boards anyway (0 = board at once)."),
+            Param[int]("publish_markers", 0, "RViz marker level: 0 = off, 1 = infrastructure, labels and interactions, 2 = full.", constraint=Range(0, 2)),
+            Param[bool]("profile_phases", False, "Time the tick phases."),
+            Param[int]("profile_interval", 0, "Log the tick phase profile every N ticks (0 = never)."),
+            Param[bool]("record_bag", False, "Record the run to a rosbag in record_dir."),
+            Param[bool]("strict_recording", True, "Abort the trial when a second publisher appears on a recorded contract topic."),
+            Param[str]("trial_id", "", "Opaque id written into the recording manifest."),
+            Param[str]("record_dir", "", "Rosbag output directory (empty = default recording directory)."),
+            Param[str]("scenario", "", "Scenario name or absolute YAML path, master mode only (empty = none)."),
+            Param[int]("ticks", 0, "Stop after N ticks (0 = no tick limit)."),
+            Param[float]("time", 0.0, "Stop after this many sim seconds, ignored when ticks is set (0 = no limit)."),
+            Param[float]("rtf", 1.0, "Real-time factor of the master tick timer (0 = unthrottled).", constraint=Range(0.0, 1000.0)),
+            Param[str]("subsystem_overrun_policy", "lag", "Tick overrun policy in subsystem mode, only lag is implemented."),
+            Param[str]("contact_mode", CONTACT_ENABLED, "How contact interactions play out.", constraint=Choices(*CONTACT_MODES)),
+            Param[float]("locomotion_standing_distance", DEFAULT_STANDING_DISTANCE, "Standing distance in meters of a locomotion-only contact pair."),
+            Param[str]("gesture_mode", GESTURE_ENABLED, "Whether agents play gestures.", constraint=Choices(*GESTURE_MODES)),
         )
-        self.declare_parameter(
-            "global_planner.resolution",
-            0.2,
-            ParameterDescriptor(description="planning grid cell size [m]", floating_point_range=[FloatingPointRange(from_value=0.01, to_value=5.0)]),
-        )
-        self.declare_parameter(
-            "global_planner.comfort_radius",
-            0.6,
-            ParameterDescriptor(description="preferred wall clearance of navmesh paths [m], relaxed in narrow passages", floating_point_range=[FloatingPointRange(from_value=0.0, to_value=5.0)]),
-        )
-        self.declare_parameter("local_planner", "sfm")
-        self.declare_parameter("force_local_planner", False)
-        self.declare_parameter("robot_policy", "")
-        self.declare_parameter("robot_shutdown", "")
-        self.declare_parameter("force_waypoint_mode", "")
-        self.declare_parameter("animation", "noop")
-        self.declare_parameter("collision", "wall_projection")
-        self.declare_parameter("occlusion", "bitmap")
-        self.declare_parameter("mode", self.MODE_MASTER)
-        self.declare_parameter("log_dir", "")
-        self.declare_parameter("replay_mode", "")
-        self.declare_parameter("waypoint_threshold", 0.1)
-        self.declare_parameter("min_speed_for_heading", 0.1)
-        self.declare_parameter("arrival_r_enter", 0.15)
-        self.declare_parameter("arrival_r_exit", 0.30)
-        self.declare_parameter("arrival_tau_brake", 0.15)
-        self.declare_parameter("zone_wait_timeout", 30.0)
-        self.declare_parameter("zone_let_out_timeout", 10.0)
-        self.declare_parameter("publish_markers", 0, ParameterDescriptor(integer_range=[IntegerRange(from_value=0, to_value=2)]))
-        self.declare_parameter("profile_phases", False)
-        self.declare_parameter("profile_interval", 0)
-        self.declare_parameter("record_bag", False)
-        self.declare_parameter("strict_recording", True)
-        self.declare_parameter("trial_id", "")
-        self.declare_parameter("record_dir", "")
-        self.declare_parameter("scenario", "")
-        self.declare_parameter("ticks", 0)
-        self.declare_parameter("time", 0.0)
-        self.declare_parameter("rtf", 1.0, ParameterDescriptor(floating_point_range=[FloatingPointRange(from_value=0.0, to_value=1000.0)]))
-        self.declare_parameter("subsystem_overrun_policy", "lag")
-        self.declare_parameter("contact_mode", CONTACT_ENABLED)
-        self.declare_parameter("locomotion_standing_distance", DEFAULT_STANDING_DISTANCE)
-        self.declare_parameter("gesture_mode", GESTURE_ENABLED)
+        for param in decls:
+            declare(self, param)
         self._static_params = frozenset(self.list_parameters([], 0).names) - inherited - _RECONFIGURABLE_PARAMS
 
         seed = self._int_param("seed")
@@ -991,7 +984,7 @@ class AgentManager(Node):
     def _declare_local_planner_params(self, planner_cls: type[LocalPlanner]) -> None:
         for key in planner_cls.PARAM_DEFAULTS:
             if not self.has_parameter(f"local_planner.{key}"):
-                self.declare_parameter(f"local_planner.{key}", 0.0, ParameterDescriptor(description=f"mean of {key}, 0 = agent type's own, a per-agent spawn value still wins"))
+                declare(self, Param[float](f"local_planner.{key}", 0.0, f"Mean of {key} (0 = agent type's own value, a per-agent spawn value still wins)."))
 
     def _read_lp_means(self) -> dict[str, float]:
         prefix = "local_planner."
