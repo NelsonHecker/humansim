@@ -20,6 +20,7 @@ from arena_humansim.core.formation import (
     PoseAnchor,
 )
 from arena_humansim.core.interaction_kinds import AccessKind, ClipSet, HandleKind, InteractionType, MembershipRole
+from arena_humansim.params import CONTACT_ENABLED, CONTACT_LOCOMOTION_ONLY, CONTACT_MODES, DEFAULT_STANDING_DISTANCE, GESTURE_MODES
 from arena_humansim.utils import RNG
 from arena_humansim.utils.loggable import Loggable
 from arena_humansim.utils.types import (
@@ -78,15 +79,6 @@ _TERMINAL_EDGES: dict[int, LifecycleEdge] = {
     int(InteractionOutcome.INTERRUPTED): LifecycleEdge.INTERRUPTED,
     int(InteractionOutcome.CANCELED): LifecycleEdge.CANCELED,
 }
-
-
-CONTACT_ENABLED = "enabled"
-CONTACT_LOCOMOTION_ONLY = "locomotion_only"
-CONTACT_MODES = (CONTACT_ENABLED, CONTACT_LOCOMOTION_ONLY)
-GESTURE_ENABLED = "enabled"
-GESTURE_DISABLED = "disabled"
-GESTURE_MODES = (GESTURE_ENABLED, GESTURE_DISABLED)
-DEFAULT_STANDING_DISTANCE = 1.2
 
 
 def check_gesture_mode(mode: str) -> str:
