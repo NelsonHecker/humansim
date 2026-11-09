@@ -162,7 +162,7 @@ ros2 launch arena_humansim arena_humansim.launch.py \
   rviz:=true
 ```
 
-Module-selection launch args (`perception`, `global_planner`, `local_planner`, `animation`, `collision`, `occlusion`) all default to the values in the parameters table below. Pass any of them on the command line to override. Any other launch arg is forwarded to the node as the param of the same name, e.g. `global_planner.resolution:=0.1` or `local_planner.relaxation_time:=0.7`, so the node's declarations stay the only list of params. The value is typed by YAML rules, so write a double with a decimal point. A name the node does not declare is ignored.
+Every node param that the launch file only forwards (`seed`, `ticks`, `time`, `rtf`, the module selectors, `robot_policy`, `robot_shutdown`, `force_waypoint_mode`, `force_local_planner`, `strict_recording`, `trial_id`) is a launch argument generated from its `Param` in `arena_humansim/params.py`, with the same name, description and choices. Empty means the node default from the parameters table below. `mode`, `scenario`, `markers`, `record`, `record_dir`, `render`, `render_format`, `rviz`, `namespace` and `use_sim_time` are launch-side arguments. Any other launch arg is forwarded to the node as the param of the same name, e.g. `global_planner.resolution:=0.1` or `local_planner.relaxation_time:=0.7`. The value is typed by YAML rules, so write a double with a decimal point. A name the node does not declare is ignored.
 
 Scenarios (world objects, agents, flow, walls) are authored under [`config/scenarios/`](arena_humansim/config/scenarios/README.md).
 
