@@ -102,6 +102,7 @@ Matcher semantics (seek dispatch by handle kind, visibility gating, queueing, se
 | `QUEUE_USE` | OBJECT | 1+ | Queue for a shared resource |
 | `BLOCK` | AGENT | 1-2 | Pursue and block a target agent |
 | `SERVICE` | TAG | 1+ | Asymmetric provider/seeker pairing by tag (also subsumes escort/follow via `formation_spec: line, anchor_kind: provider`) |
+| `PUSH_WHEELCHAIR` | TAG | 2 | A wheelchair user offers it (`offer: true`), a pusher seeks it, walks to the push handles (formation `push`) and steers the pair while the chair rides at her hands ([`core/carry.py`](arena_humansim/arena_humansim/core/carry.py)); bound and published only once she holds the handles; `cancel` lets go and the chair stays where she left it. Example: [`config/scenarios/push_wheelchair.yaml`](arena_humansim/config/scenarios/push_wheelchair.yaml) |
 
 Every interaction follows a single flow: a BT `SeekNode` emits a SEEK command, IM finds a matching open interaction and joins, or (if creation is allowed for this handle) creates one. Teardown is explicit — either a BT `CancelNode` (STOP with `reason=CANCELED`) or the contract's duration expiring (`COMPLETED`). Agents in active interactions defer despawn until the interaction ends.
 
