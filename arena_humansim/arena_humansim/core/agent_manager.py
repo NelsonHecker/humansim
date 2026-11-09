@@ -81,7 +81,7 @@ from arena_humansim.core.agents import (
     spawn_params,
 )
 from arena_humansim.core.agents.loader import resolve_agent_type_name
-from arena_humansim.core.agents.types import ATTENTION_KEYWORDS, STAIRS_KINDS, ParamDist
+from arena_humansim.core.agents.types import ATTENTION_KEYWORDS, AWARENESS_PRESETS, STAIRS_KINDS, ParamDist
 from arena_humansim.core.animation_kinds import AnimationType, locomotion_states
 from arena_humansim.core.behavior.compiler import BehaviorTreeFactory
 from arena_humansim.core.despawn_monitor import DespawnMonitor
@@ -140,6 +140,105 @@ class ObstacleData:
     interaction_types: tuple[str, ...]
     obstacle_type: str
     wall_segments: tuple[tuple[tuple[float, float], tuple[float, float]], ...]
+
+
+AwarenessInput = bool | float | int | str | dict[str, object] | list[object] | None
+
+
+def _resolve_awareness_tuple(
+    aware_raw: AwarenessInput,
+    gain_raw: AwarenessInput = None,
+    fov_gain_raw: AwarenessInput = None,
+    react_gain_raw: AwarenessInput = None,
+    robot_aware: bool | None = None,
+) -> tuple[float | None, float | None, float | None, float | None]:
+    for name, val in [
+        ("robot_awareness", aware_raw),
+        ("robot_repulsion_gain", gain_raw),
+        ("robot_fov_gain", fov_gain_raw),
+        ("robot_reaction_gain", react_gain_raw),
+    ]:
+        if isinstance(val, (dict, list)):
+            raise TypeError(f"Scripted agents require a scalar, bool, or preset name for {name}, got {type(val).__name__}")
+
+    baseline_tuple: tuple[float, float, float, float] | None = None
+    if robot_aware is not None:
+        baseline_tuple = AWARENESS_PRESETS["normal"] if robot_aware else AWARENESS_PRESETS["blind"]
+
+    awareness: float | None = baseline_tuple[0] if baseline_tuple is not None else None
+    repulsion_gain: float | None = baseline_tuple[1] if baseline_tuple is not None else None
+    fov_gain: float | None = baseline_tuple[2] if baseline_tuple is not None else None
+    react_gain: float | None = baseline_tuple[3] if baseline_tuple is not None else None
+
+    if aware_raw is not None:
+        if isinstance(aware_raw, bool):
+            preset = AWARENESS_PRESETS["normal"] if aware_raw else AWARENESS_PRESETS["blind"]
+            awareness = preset[0]
+            if gain_raw is None and baseline_tuple is None:
+                repulsion_gain = preset[1]
+            if fov_gain_raw is None and baseline_tuple is None:
+                fov_gain = preset[2]
+            if react_gain_raw is None and baseline_tuple is None:
+                react_gain = preset[3]
+        elif isinstance(aware_raw, (int, float)):
+            awareness = float(np.clip(float(aware_raw), 0.0, 1.0))
+        elif isinstance(aware_raw, str):
+            key = aware_raw.strip().lower()
+            if key in AWARENESS_PRESETS:
+                p_aw, p_gn, p_fov, p_react = AWARENESS_PRESETS[key]
+                awareness = p_aw
+                if gain_raw is None and baseline_tuple is None:
+                    repulsion_gain = p_gn
+                if fov_gain_raw is None and baseline_tuple is None:
+                    fov_gain = p_fov
+                if react_gain_raw is None and baseline_tuple is None:
+                    react_gain = p_react
+            else:
+                try:
+                    awareness = float(np.clip(float(key), 0.0, 1.0))
+                except ValueError:
+                    raise ValueError(f"Unknown awareness preset {aware_raw!r}; valid presets: {', '.join(sorted(AWARENESS_PRESETS))}") from None
+
+    if gain_raw is not None:
+        if isinstance(gain_raw, (int, float)):
+            repulsion_gain = max(0.0, float(gain_raw))
+        elif isinstance(gain_raw, str):
+            key = gain_raw.strip().lower()
+            if key in AWARENESS_PRESETS:
+                repulsion_gain = AWARENESS_PRESETS[key][1]
+            else:
+                try:
+                    repulsion_gain = max(0.0, float(key))
+                except ValueError:
+                    raise ValueError(f"Unknown repulsion preset {gain_raw!r}; valid presets: {', '.join(sorted(AWARENESS_PRESETS))}") from None
+
+    if fov_gain_raw is not None:
+        if isinstance(fov_gain_raw, (int, float)):
+            fov_gain = max(0.0, float(fov_gain_raw))
+        elif isinstance(fov_gain_raw, str):
+            key = fov_gain_raw.strip().lower()
+            if key in AWARENESS_PRESETS:
+                fov_gain = AWARENESS_PRESETS[key][2]
+            else:
+                try:
+                    fov_gain = max(0.0, float(key))
+                except ValueError:
+                    raise ValueError(f"Unknown fov preset {fov_gain_raw!r}; valid presets: {', '.join(sorted(AWARENESS_PRESETS))}") from None
+
+    if react_gain_raw is not None:
+        if isinstance(react_gain_raw, (int, float)):
+            react_gain = max(0.05, float(react_gain_raw))
+        elif isinstance(react_gain_raw, str):
+            key = react_gain_raw.strip().lower()
+            if key in AWARENESS_PRESETS:
+                react_gain = AWARENESS_PRESETS[key][3]
+            else:
+                try:
+                    react_gain = max(0.05, float(key))
+                except ValueError:
+                    raise ValueError(f"Unknown reaction preset {react_gain_raw!r}; valid presets: {', '.join(sorted(AWARENESS_PRESETS))}") from None
+
+    return awareness, repulsion_gain, fov_gain, react_gain
 
 
 _TUNABLE_PARAMS = frozenset(
@@ -539,6 +638,7 @@ class AgentManager(Node):
         self._sim_time_ns: int = 0
         self._subsystem_epoch_ns: int = 0
         self._pending_scenario_spawns: deque[tuple[int, AgentStateMsg]] = deque()
+        self._scenario_awareness_overrides: dict[int, tuple[float | None, float | None, float | None, float | None]] = {}
         self._pending_stimuli: deque[tuple[int, int, str, float]] = deque()
         self._stimulus_levels: dict[str, float] = {}
         self._meta_dirty = True
@@ -1117,6 +1217,15 @@ class AgentManager(Node):
         for a in scenario.agents:
             if int(a.agent_id) == 0:
                 a.agent_id = self._allocate_robot_id() if int(a.kind) == int(AgentKind.ROBOT) else self._allocate_agent_id()
+            if any(v is not None for v in (a.robot_aware, a.robot_awareness, a.robot_repulsion_gain, a.robot_fov_gain, a.robot_reaction_gain)):
+                aw, gn, fov_g, react_g = _resolve_awareness_tuple(
+                    a.robot_awareness,
+                    a.robot_repulsion_gain,
+                    a.robot_fov_gain,
+                    a.robot_reaction_gain,
+                    robot_aware=a.robot_aware,
+                )
+                self._scenario_awareness_overrides[int(a.agent_id)] = (aw, gn, fov_g, react_g)
             if int(a.kind) == int(AgentKind.ROBOT) and a.services:
                 self._robot_service_advertiser.register(int(a.agent_id), a.services)
             msg = AgentStateMsg()
@@ -1235,6 +1344,11 @@ class AgentManager(Node):
                     agent_radius=float(tmpl.agent_radius),
                     agent_type=tmpl.agent_type,
                     sink_affinity=[SinkAffinity(sink_name=f"sink_{sa.sink_idx}", weight=float(sa.weight)) for sa in tmpl.sink_affinity],
+                    robot_awareness=tmpl.robot_awareness,
+                    robot_repulsion_gain=tmpl.robot_repulsion_gain,
+                    robot_fov_gain=tmpl.robot_fov_gain,
+                    robot_reaction_gain=tmpl.robot_reaction_gain,
+                    robot_aware=tmpl.robot_aware,
                 ),
             )
             self._spawn_scheduler.add_source(src)
@@ -1357,7 +1471,37 @@ class AgentManager(Node):
         agent_msg.desired_velocity = spawn_req.desired_velocity
         agent_msg.radius = spawn_req.agent_radius
         agent_msg.agent_type = spawn_req.agent_type
+        if any(v is not None for v in (spawn_req.robot_awareness, spawn_req.robot_repulsion_gain, spawn_req.robot_fov_gain, spawn_req.robot_reaction_gain)):
+            self._scenario_awareness_overrides[aid] = (
+                spawn_req.robot_awareness,
+                spawn_req.robot_repulsion_gain,
+                spawn_req.robot_fov_gain,
+                spawn_req.robot_reaction_gain,
+            )
         return self._build_base_agent(aid, agent_msg, list(spawn_req.waypoints))
+
+    def _apply_awareness_overrides(self, aid: int, idx: int, agent: BaseAgent) -> None:
+        if aid not in self._scenario_awareness_overrides:
+            return
+        aw, gn, fov_g, react_g = self._scenario_awareness_overrides[aid]
+        perc_evolve: dict[str, Any] = {}
+        if aw is not None:
+            self._pool.robot_awareness[idx] = aw
+            perc_evolve["robot_awareness"] = aw
+        if gn is not None:
+            self._pool.robot_repulsion_gain[idx] = gn
+            perc_evolve["robot_repulsion_gain"] = gn
+        if fov_g is not None:
+            self._pool.robot_fov_gain[idx] = fov_g
+            perc_evolve["robot_fov_gain"] = fov_g
+        if react_g is not None:
+            self._pool.robot_reaction_gain[idx] = react_g
+            perc_evolve["robot_reaction_gain"] = react_g
+        if perc_evolve:
+            agent.params = attrs.evolve(
+                agent.params,
+                perception=attrs.evolve(agent.params.perception, **perc_evolve),
+            )
 
     def _lookup_agent_name(self, name: str, kind: int | None = None) -> int | None:
         """Exact name, else the unique agent whose name ends in ``/name``, optionally restricted to one AgentState kind."""
@@ -1416,6 +1560,7 @@ class AgentManager(Node):
         self._prone.discard(aid)
         self._parked_from.pop(aid, None)
         self._rising.pop(aid, None)
+        self._scenario_awareness_overrides.pop(aid, None)
         if aid in self._pool._id_to_idx:
             idx = self._pool._id_to_idx[aid]
             swapped_id = self._pool.swap_remove(aid)
@@ -1520,6 +1665,7 @@ class AgentManager(Node):
             agent = self._build_base_agent_from_spawn(aid, spawn_req)
             self._agents[aid] = agent
             idx = self._pool.add_agent(agent)
+            self._apply_awareness_overrides(aid, idx, agent)
             self._pool.policy_idx[idx] = self._spawn_policy_idx(aid, agent)
             self._pool_agent_ids.append(aid)
             self._mark_roster_dirty()
@@ -2782,6 +2928,7 @@ class AgentManager(Node):
             if kind == KIND_ROBOT:
                 self._pool.interaction_class[idx] = interaction_classes.ROBOT
             self._pool.policy_idx[idx] = policy_idx
+            self._apply_awareness_overrides(aid, idx, agent)
             self._pool_agent_ids.append(aid)
             self._mark_roster_dirty()
 
@@ -2884,6 +3031,7 @@ class AgentManager(Node):
 
     def _wipe(self) -> None:
         self._agents.clear()
+        self._scenario_awareness_overrides.clear()
         self._pool_agent_ids.clear()
         self._pool.reset()
         self._mark_roster_dirty()

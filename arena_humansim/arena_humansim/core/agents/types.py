@@ -58,6 +58,17 @@ class ParamDist:
         return attrs.evolve(self, mean=mean, clip_low=max(self.clip_low + delta, min(self.clip_low, mean)), clip_high=self.clip_high + delta)
 
 
+# Preset mappings: (robot_awareness, robot_repulsion_gain, robot_fov_gain, robot_reaction_gain)
+AWARENESS_PRESETS: dict[str, tuple[float, float, float, float]] = {
+    "blind": (0.0, 0.0, 0.0, 1.0),
+    "distracted": (0.3, 0.6, 0.3, 0.5),
+    "normal": (1.0, 1.0, 1.0, 1.0),
+    "interested": (1.0, 0.6, 1.0, 1.0),
+    "aggressive": (1.0, 0.4, 0.8, 1.2),
+    "scared": (1.0, 2.0, 1.2, 0.7),
+}
+
+
 @overload
 def _as_paramdist(val: None) -> None: ...
 @overload
@@ -75,6 +86,143 @@ def _as_paramdist(val: object) -> "ParamDist | None":
     if isinstance(val, dict):
         return ParamDist(**val)
     return val  # type: ignore[return-value]
+
+
+@overload
+def _as_awareness_dist(val: None) -> None: ...
+@overload
+def _as_awareness_dist(val: "ParamDist | float | str | bool | Mapping[str, float]") -> "ParamDist": ...
+@overload
+def _as_awareness_dist(val: object) -> "ParamDist | None": ...
+def _as_awareness_dist(val: object) -> "ParamDist | None":
+    if val is None:
+        return None
+    if isinstance(val, bool):
+        v = 1.0 if val else 0.0
+        return ParamDist(mean=v, std=0.0, clip_low=0.0, clip_high=1.0)
+    if isinstance(val, str):
+        key = val.strip().lower()
+        if key in AWARENESS_PRESETS:
+            v = AWARENESS_PRESETS[key][0]
+            return ParamDist(mean=v, std=0.0, clip_low=0.0, clip_high=1.0)
+        try:
+            v = float(key)
+            return ParamDist(mean=v, std=0.0, clip_low=0.0, clip_high=1.0)
+        except ValueError:
+            raise ValueError(f"unknown awareness preset or value {val!r}; valid presets: {', '.join(sorted(AWARENESS_PRESETS))}") from None
+    if isinstance(val, (int, float)):
+        v = float(val)
+        return ParamDist(mean=v, std=0.0, clip_low=0.0, clip_high=1.0)
+    if isinstance(val, ParamDist):
+        return val
+    if isinstance(val, dict):
+        d = dict(val)
+        d.setdefault("clip_low", 0.0)
+        d.setdefault("clip_high", 1.0)
+        return ParamDist(**d)
+    return None
+
+
+@overload
+def _as_repulsion_dist(val: None) -> None: ...
+@overload
+def _as_repulsion_dist(val: "ParamDist | float | str | bool | Mapping[str, float]") -> "ParamDist": ...
+@overload
+def _as_repulsion_dist(val: object) -> "ParamDist | None": ...
+def _as_repulsion_dist(val: object) -> "ParamDist | None":
+    if val is None:
+        return None
+    if isinstance(val, bool):
+        v = 1.0 if val else 0.0
+        return ParamDist(mean=v, std=0.0, clip_low=0.0, clip_high=float("inf"))
+    if isinstance(val, str):
+        key = val.strip().lower()
+        if key in AWARENESS_PRESETS:
+            v = AWARENESS_PRESETS[key][1]
+            return ParamDist(mean=v, std=0.0, clip_low=0.0, clip_high=float("inf"))
+        try:
+            v = float(key)
+            return ParamDist(mean=v, std=0.0, clip_low=0.0, clip_high=float("inf"))
+        except ValueError:
+            raise ValueError(f"unknown repulsion gain preset or value {val!r}; valid presets: {', '.join(sorted(AWARENESS_PRESETS))}") from None
+    if isinstance(val, (int, float)):
+        v = float(val)
+        return ParamDist(mean=v, std=0.0, clip_low=0.0, clip_high=float("inf"))
+    if isinstance(val, ParamDist):
+        return val
+    if isinstance(val, dict):
+        d = dict(val)
+        d.setdefault("clip_low", 0.0)
+        return ParamDist(**d)
+    return None
+
+
+@overload
+def _as_fov_dist(val: None) -> None: ...
+@overload
+def _as_fov_dist(val: "ParamDist | float | str | bool | Mapping[str, float]") -> "ParamDist": ...
+@overload
+def _as_fov_dist(val: object) -> "ParamDist | None": ...
+def _as_fov_dist(val: object) -> "ParamDist | None":
+    if val is None:
+        return None
+    if isinstance(val, bool):
+        v = 1.0 if val else 0.0
+        return ParamDist(mean=v, std=0.0, clip_low=0.0, clip_high=float("inf"))
+    if isinstance(val, str):
+        key = val.strip().lower()
+        if key in AWARENESS_PRESETS:
+            v = AWARENESS_PRESETS[key][2]
+            return ParamDist(mean=v, std=0.0, clip_low=0.0, clip_high=float("inf"))
+        try:
+            v = float(key)
+            return ParamDist(mean=v, std=0.0, clip_low=0.0, clip_high=float("inf"))
+        except ValueError:
+            raise ValueError(f"unknown fov gain preset or value {val!r}; valid presets: {', '.join(sorted(AWARENESS_PRESETS))}") from None
+    if isinstance(val, (int, float)):
+        v = float(val)
+        return ParamDist(mean=v, std=0.0, clip_low=0.0, clip_high=float("inf"))
+    if isinstance(val, ParamDist):
+        return val
+    if isinstance(val, dict):
+        d = dict(val)
+        d.setdefault("clip_low", 0.0)
+        return ParamDist(**d)
+    return None
+
+
+@overload
+def _as_reaction_dist(val: None) -> None: ...
+@overload
+def _as_reaction_dist(val: "ParamDist | float | str | bool | Mapping[str, float]") -> "ParamDist": ...
+@overload
+def _as_reaction_dist(val: object) -> "ParamDist | None": ...
+def _as_reaction_dist(val: object) -> "ParamDist | None":
+    if val is None:
+        return None
+    if isinstance(val, bool):
+        v = 1.0 if val else 0.0
+        return ParamDist(mean=v, std=0.0, clip_low=0.05, clip_high=float("inf"))
+    if isinstance(val, str):
+        key = val.strip().lower()
+        if key in AWARENESS_PRESETS:
+            v = AWARENESS_PRESETS[key][3]
+            return ParamDist(mean=v, std=0.0, clip_low=0.05, clip_high=float("inf"))
+        try:
+            v = float(key)
+            return ParamDist(mean=v, std=0.0, clip_low=0.05, clip_high=float("inf"))
+        except ValueError:
+            raise ValueError(f"unknown reaction gain preset or value {val!r}; valid presets: {', '.join(sorted(AWARENESS_PRESETS))}") from None
+    if isinstance(val, (int, float)):
+        v = float(val)
+        return ParamDist(mean=v, std=0.0, clip_low=0.05, clip_high=float("inf"))
+    if isinstance(val, ParamDist):
+        return val
+    if isinstance(val, dict):
+        d = dict(val)
+        d.setdefault("clip_low", 0.05)
+        return ParamDist(**d)
+    return None
 
 
 @attrs.frozen
@@ -286,6 +434,10 @@ class PerceptionDist:
     vision_fov: ParamDist = attrs.field(default=ParamDist(180.0, 10.0), converter=_as_paramdist)
     proximity_sense: ParamDist = attrs.field(default=ParamDist(1.0, 0.2, clip_low=0.5, clip_high=2.0), converter=_as_paramdist)
     vision_occlusion: bool = True
+    robot_awareness: ParamDist = attrs.field(default=ParamDist(1.0, clip_low=0.0, clip_high=1.0), converter=_as_awareness_dist)
+    robot_repulsion_gain: ParamDist = attrs.field(default=ParamDist(1.0, clip_low=0.0), converter=_as_repulsion_dist)
+    robot_fov_gain: ParamDist = attrs.field(default=ParamDist(1.0, clip_low=0.0), converter=_as_fov_dist)
+    robot_reaction_gain: ParamDist = attrs.field(default=ParamDist(1.0, clip_low=0.05), converter=_as_reaction_dist)
 
 
 KINEMATICS = ("holonomic", "along_heading")
@@ -388,6 +540,10 @@ class SampledPerception:
     vision_fov: float = 180.0
     proximity_sense: float = 1.0
     vision_occlusion: bool = True
+    robot_awareness: float = 1.0
+    robot_repulsion_gain: float = 1.0
+    robot_fov_gain: float = 1.0
+    robot_reaction_gain: float = 1.0
 
 
 @attrs.frozen
@@ -511,6 +667,10 @@ def sample_agent_type(
         vision_fov=_sample_dist(agent_type.perception.vision_fov, rng),
         proximity_sense=_sample_dist(agent_type.perception.proximity_sense, rng),
         vision_occlusion=agent_type.perception.vision_occlusion,
+        robot_awareness=_sample_dist(agent_type.perception.robot_awareness, rng),
+        robot_repulsion_gain=_sample_dist(agent_type.perception.robot_repulsion_gain, rng),
+        robot_fov_gain=_sample_dist(agent_type.perception.robot_fov_gain, rng),
+        robot_reaction_gain=_sample_dist(agent_type.perception.robot_reaction_gain, rng),
     )
 
     from arena_humansim.local_planner import LocalPlanner

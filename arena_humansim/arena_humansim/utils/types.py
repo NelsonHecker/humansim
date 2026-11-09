@@ -312,6 +312,11 @@ class AgentTemplate:
     kind: AgentKind = AgentKind.HUMAN
     policy: str = ""
     policy_params: str = ""
+    robot_awareness: Any = None
+    robot_repulsion_gain: Any = None
+    robot_fov_gain: Any = None
+    robot_reaction_gain: Any = None
+    robot_aware: bool | None = None
 
 
 @attrs.define
@@ -363,6 +368,10 @@ class SpawnRequest:
     agent_type: str = "adult"
     waypoints: list[Pose2D] = attrs.Factory(list)
     lifetime: AgentLifetime = attrs.Factory(AgentLifetime)
+    robot_awareness: float | None = None
+    robot_repulsion_gain: float | None = None
+    robot_fov_gain: float | None = None
+    robot_reaction_gain: float | None = None
 
 
 @attrs.define
