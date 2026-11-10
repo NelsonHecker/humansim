@@ -19,6 +19,7 @@ from arena_humansim.core.formation import (
     ObjectAnchor,
     PoseAnchor,
 )
+from arena_humansim.core.formation.push import PushFormation
 from arena_humansim.core.interaction_kinds import AccessKind, ClipSet, HandleKind, InteractionType, MembershipRole
 from arena_humansim.utils import RNG
 from arena_humansim.utils.loggable import Loggable
@@ -855,11 +856,10 @@ class InteractionManager(Loggable):
         for iid in sorted(self._interactions_by_type.get(int(InteractionType.PUSH_WHEELCHAIR), ())):
             interaction = self.interactions.get(iid)
             formation = interaction.contract.formation if interaction is not None else None
-            if interaction is None or interaction.outcome != InteractionOutcome.ACTIVE or formation is None:
+            if interaction is None or interaction.outcome != InteractionOutcome.ACTIVE or not isinstance(formation, PushFormation):
                 continue
-            pusher = getattr(formation, "pusher", None)
-            if pusher is not None and pusher in interaction.participants:
-                out.append((pusher, formation.rider, formation))
+            if formation.pusher is not None and formation.pusher in interaction.participants:
+                out.append((formation.pusher, formation.rider, formation))
         return out
 
     def _handle_seek(self, cmd: HighLevelCommand) -> None:
