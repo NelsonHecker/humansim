@@ -59,7 +59,7 @@ Declaring the block at all (even empty) activates the locomotion profile for the
 
 The zero-means-off fields (`footprint_length`, `recovery.*`) take a bare number for `0`, since the dict form's `clip_low` default of `0.01` would lift a `{mean: 0}` to `0.01`.
 
-Pose (`pose:`, optional): passed through untouched to the renderer (arena_runtime's human animation), humansim never reads it. Per-state (`walk`, `idle`, `run`) joint profiles keyed to the published gait phase, see the renderer's profile docs. `hold: {l|r: <grip radius m> | {radius, angle, curls, wrap}}` closes each named hand on a prop of that radius (cane, pole, walker handle): the renderer solves the finger curls from the template hand skeleton; `angle` turns the grip in the palm (deg), `curls` (thumb to pinky) gives a character's own curls instead (the retarget's `--hold` reports them), `wrap: true` closes the thumb over the fingers.
+Pose (`pose:`, optional): passed through untouched to the renderer (arena_runtime's human animation), humansim never reads it. Per-state (`walk`, `idle`, `run`) joint profiles keyed to the published gait phase, see the renderer's profile docs. `hold: {l|r: <grip radius m> | {radius, angle, curls, wrap}}` closes each named hand on a prop of that radius (cane, pole, walker handle): the renderer solves the finger curls from the template hand skeleton; `angle` turns the grip in the palm (deg), `curls` (thumb to pinky) gives a character's own curls instead (the retarget's `--hold` reports them), `wrap: true` closes the thumb over the fingers. `while: {<interaction>: <pose section>}` gives the whole profile the agent takes while in that interaction (e.g. `caregiver` pushing a wheelchair, `wheelchair_manual` being pushed).
 
 Interaction class (`interaction_class:`, optional name string): social-force class of the type for the local planners' per-class gain matrices. Unset = `human`, robots are always `robot`, any other word (e.g. `wheelchair`) registers a new class on first sight, see [../../arena_humansim/core/interaction_classes.py](../../arena_humansim/core/interaction_classes.py).
 
@@ -118,7 +118,7 @@ Candidate actions the autonomous selector can pick from. Fields:
 | Field | Meaning |
 |---|---|
 | `when` | `{need: {below\|above: X}}` - preconditions gating the action. |
-| `interaction` | One of `TALK_TO`, `GROUP_CONVERSATION`, `GROUP_WALK`, `SIT_ON`, `LIE_ON`, `USE`, `QUEUE_USE`, `WAVE_AT`, `BLOCK`, `SERVICE`. Omit for nav-only. |
+| `interaction` | One of `TALK_TO`, `GROUP_CONVERSATION`, `GROUP_WALK`, `SIT_ON`, `LIE_ON`, `USE`, `QUEUE_USE`, `WAVE_AT`, `BLOCK`, `SERVICE`, `PUSH_WHEELCHAIR`. Omit for nav-only. |
 | `target` | Object id / object type / service tag / agent id, per the interaction's handle kind. |
 | `duration` | Distribution (seconds). |
 | `patience` | Distribution (seconds) capping the whole action (nav + execute). |
@@ -216,7 +216,7 @@ Each step is either a `StepDef` (interaction, pure-wait, cancel) or a `GoToStepD
 
 | Field | Meaning |
 |---|---|
-| `interaction` | `TALK_TO` / `GROUP_CONVERSATION` / `GROUP_WALK` / `WAVE_AT` / `SIT_ON` / `LIE_ON` / `USE` / `QUEUE_USE` / `BLOCK` / `SERVICE`. Omit for a pure-wait step. |
+| `interaction` | `TALK_TO` / `GROUP_CONVERSATION` / `GROUP_WALK` / `WAVE_AT` / `SIT_ON` / `LIE_ON` / `USE` / `QUEUE_USE` / `BLOCK` / `SERVICE` / `PUSH_WHEELCHAIR`. Omit for a pure-wait step. |
 | `target` | Interpreted per the interaction's handle kind: object id/type for `OBJECT`, service tag (str) for `SERVICE`, agent id (int) for `BLOCK`, omit for symmetric types. |
 | `offer` | SERVICE provider side. `true` makes this step create-and-wait rather than find-and-join. Required when a SERVICE interaction has no existing provider. |
 | `cancel` | `true` => emit STOP with `reason=CANCELED` on the agent's current interaction. Mutually exclusive with `interaction:`. |
@@ -235,7 +235,7 @@ Each step is either a `StepDef` (interaction, pure-wait, cancel) or a `GoToStepD
 | `on_failure` | Accepted (default `"abort"`) but not read by the compiler - a step FAILURE always propagates to the enclosing sequence's own `on_failure`. |
 | `interruptible` | Accepted (bool, default unset) but not read anywhere. |
 
-`offer: true` is only valid for interactions that allow it (only `SERVICE`). Provider-side fields (`queueable`, `min_participants`, `max_participants`, `formation_spec`) require `offer: true`, or loading fails. Unknown step fields fail to load with the offending key names. A few older field names are explicitly rejected with a migration hint: `accept`, `interaction: FOLLOW`, `target_object_id`, `target_object_type`, `target_agent`, `service_tag` (use `target:` and, for FOLLOW, `interaction: SERVICE` with `offer: true`).
+`offer: true` is only valid for interactions that allow it (`SERVICE`, `PUSH_WHEELCHAIR`). Provider-side fields (`queueable`, `min_participants`, `max_participants`, `formation_spec`) require `offer: true`, or loading fails. Unknown step fields fail to load with the offending key names. A few older field names are explicitly rejected with a migration hint: `accept`, `interaction: FOLLOW`, `target_object_id`, `target_object_type`, `target_agent`, `service_tag` (use `target:` and, for FOLLOW, `interaction: SERVICE` with `offer: true`).
 
 `GoToStepDef` (`kind: go_to`) takes exactly one of:
 

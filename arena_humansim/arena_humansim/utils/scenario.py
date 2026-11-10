@@ -144,7 +144,7 @@ class AnchorConfig:
 
 @attrs.define
 class FormationConfig:
-    type: str = ""  # "line" | "cluster" | "f_formation" | "dyad" | "walk"
+    type: str = ""  # "line" | "cluster" | "f_formation" | "dyad" | "walk" | "push"
     anchor: AnchorConfig | None = None  # defaults to OBJECT anchor on the owning object
     params: dict[str, float] = attrs.Factory(dict)  # strategy-specific (base_step, radius, etc)
 

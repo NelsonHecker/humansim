@@ -19,6 +19,7 @@ from arena_humansim.core.formation import (
     ObjectAnchor,
     PoseAnchor,
 )
+from arena_humansim.core.formation.push import PushFormation
 from arena_humansim.core.interaction_kinds import AccessKind, ClipSet, HandleKind, InteractionType, MembershipRole
 from arena_humansim.params import CONTACT_ENABLED, CONTACT_LOCOMOTION_ONLY, CONTACT_MODES, DEFAULT_STANDING_DISTANCE, GESTURE_MODES
 from arena_humansim.utils import RNG
@@ -640,7 +641,7 @@ class InteractionManager(Loggable):
         """(interaction_id, interaction_type) of the agent's ACTIVE participant interaction, or None."""
         for iid in self._iter_membership(agent_id, MembershipRole.PARTICIPANT):
             interaction = self.interactions.get(iid)
-            if interaction is not None and interaction.outcome == InteractionOutcome.ACTIVE:
+            if interaction is not None and interaction.outcome == InteractionOutcome.ACTIVE and self._engaged(interaction, agent_id):
                 return iid, interaction.type
         return None
 
@@ -829,9 +830,29 @@ class InteractionManager(Loggable):
         BT nodes to decide whether to re-emit a seek or return SUCCESS."""
         for iid in self._iter_membership(agent_id, MembershipRole.PARTICIPANT):
             interaction = self.interactions.get(iid)
-            if interaction is not None and interaction.outcome == InteractionOutcome.ACTIVE and self._matches(iid, spec):
+            if interaction is not None and interaction.outcome == InteractionOutcome.ACTIVE and self._matches(iid, spec) and self._engaged(interaction, agent_id):
                 return True
         return False
+
+    @staticmethod
+    def _engaged(interaction: InteractionState, agent_id: int) -> bool:
+        """An ACTIVE member takes part, except in a kind engaged on arrival before its formation says it arrived."""
+        if not InteractionType(interaction.type).kind.engaged_on_arrival:
+            return True
+        formation = interaction.contract.formation
+        return formation is None or formation.arrived(agent_id)
+
+    def carries(self) -> list[tuple[int, int, Any]]:
+        """(pusher, rider, push formation) of every ACTIVE push, held or still being approached."""
+        out: list[tuple[int, int, Any]] = []
+        for iid in sorted(self._interactions_by_type.get(int(InteractionType.PUSH_WHEELCHAIR), ())):
+            interaction = self.interactions.get(iid)
+            formation = interaction.contract.formation if interaction is not None else None
+            if interaction is None or interaction.outcome != InteractionOutcome.ACTIVE or not isinstance(formation, PushFormation):
+                continue
+            if formation.pusher is not None and formation.pusher in interaction.participants:
+                out.append((formation.pusher, formation.rider, formation))
+        return out
 
     def _handle_seek(self, cmd: HighLevelCommand) -> None:
         assert cmd.spec is not None, "SEEK command requires spec"
