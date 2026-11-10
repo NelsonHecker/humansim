@@ -163,7 +163,7 @@ ros2 launch arena_humansim arena_humansim.launch.py \
   rviz:=true
 ```
 
-Module-selection launch args (`perception`, `global_planner`, `local_planner`, `animation`, `collision`, `occlusion`) all default to the values in the parameters table below. Pass any of them on the command line to override. Any other launch arg is forwarded to the node as the param of the same name, e.g. `global_planner.resolution:=0.1` or `local_planner.relaxation_time:=0.7`, so the node's declarations stay the only list of params. The value is typed by YAML rules, so write a double with a decimal point. A name the node does not declare is ignored.
+Every node param that the launch file only forwards (`seed`, `ticks`, `time`, `rtf`, the module selectors, `robot_policy`, `robot_shutdown`, `force_waypoint_mode`, `force_local_planner`, `strict_recording`, `trial_id`) is a launch argument generated from its `Param` in `arena_humansim/params.py`, with the same name, description and choices. Empty means the node default from the parameters table below. `mode`, `scenario`, `markers`, `record`, `record_dir`, `render`, `render_format`, `rviz`, `namespace` and `use_sim_time` are launch-side arguments. Any other launch arg is forwarded to the node as the param of the same name, e.g. `global_planner.resolution:=0.1` or `local_planner.relaxation_time:=0.7`. The value is typed by YAML rules, so write a double with a decimal point. A name the node does not declare is ignored.
 
 Scenarios (world objects, agents, flow, walls) are authored under [`config/scenarios/`](arena_humansim/config/scenarios/README.md).
 
@@ -200,20 +200,20 @@ Config format and stage semantics: [`config/benchmark/README.md`](arena_humansim
 
 | Parameter | Default | Description |
 |---|---|---|
-| `mode` | `master` | `master` owns `/clock` and ticks on a wall timer, `subsystem` ticks on `/clock` |
+| `mode` | `master` | `master` owns `/clock` and ticks on a wall timer, `subsystem` ticks on `/clock`, anything else is rejected |
 | `seed` | `0` | RNG seed for deterministic runs |
 | `dt` | `0.05` | Simulation timestep (s) |
-| `bt_tick_interval` | `5` | BT ticks every N sim ticks |
-| `perception` | `default` | Perception module |
-| `global_planner` | `navmesh` | Global planner module |
+| `bt_tick_interval` | `5` | Behavior trees tick once every N sim ticks, 1 to 100000 |
+| `perception` | `default` | Perception module name |
+| `global_planner` | `navmesh` | Global planner module name |
 | `global_planner.inflation_radius` | `0.38` | Wall clearance of planned paths (m), rounded up to whole grid cells |
 | `global_planner.resolution` | `0.2` | Planning grid cell size (m), grid planners only |
 | `global_planner.comfort_radius` | `0.6` | Preferred wall clearance of navmesh paths (m), relaxed in narrow passages, navmesh only |
-| `local_planner` | `sfm` | Local planner module |
+| `local_planner` | `sfm` | Default local planner module name |
 | `local_planner.<key>` | `0` | Mean of a local planner param (`relaxation_time`, `repulsion_strength`, `repulsion_range`, `anisotropy`, and for `hsfm` `lateral_gain`, `lateral_damping`, `angular_gain`, `angular_damping`). `0` leaves the agent type's own value |
-| `animation` | `noop` | Animation module |
-| `collision` | `wall_projection` | Collision resolver |
-| `occlusion` | `bitmap` | Occlusion module |
+| `animation` | `noop` | Animation module name |
+| `collision` | `wall_projection` | Collision resolver module name |
+| `occlusion` | `bitmap` | Occlusion module name |
 | `waypoint_threshold` | `0.1` | Distance (m) at which a waypoint counts as reached |
 | `min_speed_for_heading` | `0.1` | Speed (m/s) below which an agent keeps its heading |
 | `arrival_r_enter`, `arrival_r_exit` | `0.15`, `0.30` | Radii (m) at which an agent latches onto its goal and releases it |
@@ -221,8 +221,23 @@ Config format and stage semantics: [`config/benchmark/README.md`](arena_humansim
 | `zone_wait_timeout` | `30.0` | Sim time (s) after reaching a teleport zone's wait pose or taking a spot before a rider not yet teleported leaves the zone and is routed again |
 | `zone_let_out_timeout` | `10.0` | Sim time (s) of an open zone that a waiting rider leaves to those getting out before it boards anyway, `0` boards at once |
 | `profile_phases`, `profile_interval` | `false`, `0` | Time the tick phases, log the profile every N ticks |
-| `publish_markers` | `0` | RViz markers: 0=off, 1=infrastructure+labels+interactions, 2=full |
-| `log_dir` | `""` | Directory for replay logs |
+| `publish_markers` | `0` | RViz marker level: 0=off, 1=infrastructure+labels+interactions, 2=full |
+| `log_dir` | `""` | Directory for simulation replay logs, empty = no logging |
+| `replay_mode` | `""` | Replay log to load and play back, empty = no replay |
+| `force_local_planner` | `false` | Force every agent onto `local_planner` and ignore the per-agent policy of the scenario |
+| `robot_policy` | `""` | Policy that replaces the policy of every robot-kind agent at scenario load, empty = keep the scenario policy |
+| `robot_shutdown` | `""` | `true` or `false` overrides `scenario.simulation.robot_shutdown`, empty = use the scenario value |
+| `force_waypoint_mode` | `""` | `once`, `repeat`, `reverse` or `random` replaces the waypoint mode of every human scenario agent at load, empty = keep the scenario value |
+| `ticks`, `time` | `0`, `0.0` | Stop after N ticks or after this many sim seconds (ignored when `ticks` is set), `0` = no limit |
+| `rtf` | `1.0` | Real-time factor of the master tick timer, 0 to 1000, `0` = unthrottled |
+| `subsystem_overrun_policy` | `lag` | Tick overrun policy in subsystem mode, only `lag` is implemented |
+| `contact_mode` | `enabled` | `enabled` or `locomotion_only`, how contact interactions play out |
+| `locomotion_standing_distance` | `1.2` | Standing distance (m) of a locomotion-only contact pair |
+| `gesture_mode` | `enabled` | `enabled` or `disabled`, whether agents play gestures |
+| `record_bag`, `record_dir` | `false`, `""` | Record the run to a rosbag in `record_dir`, empty = default recording directory |
+| `strict_recording` | `true` | Abort the trial when a second publisher appears on a recorded contract topic |
+| `trial_id` | `""` | Opaque id written into the recording manifest |
+| `scenario` | `""` | Scenario name or absolute YAML path, master mode only |
 
 An integer set on a double param is widened, so `ros2 param set <node> global_planner.resolution 1` is accepted.
 
@@ -237,6 +252,7 @@ A `set_parameters` call on a running node is validated and stored at once and ta
 | `local_planner.<key>` | Mean of a local planner param (`relaxation_time`, `repulsion_strength`, ...). It replaces the mean of the agent type and keeps its spread. `0` leaves the agent type's own value. Declared for the keys of the startup planner and of every planner selected through `local_planner` |
 | `waypoint_threshold`, `min_speed_for_heading`, `arrival_r_enter`, `arrival_r_exit`, `arrival_tau_brake`, `zone_wait_timeout`, `zone_let_out_timeout`, `force_local_planner`, `profile_phases`, `profile_interval` | The node re-reads them. `arrival_r_enter` must stay below `arrival_r_exit` |
 | `publish_markers` | The marker level changes. `0` deletes the published markers |
+| `seed` | Nothing at a soft `reset`, which keeps the RNG. The next plain `reset` or `remove_agents` with no ids re-roots every stream on it, so the next crowd draws as a first crowd with that seed does |
 | `rtf` | Master mode only, retimes the tick timer |
 
 Re-seating moves every live agent that follows the defaults onto the current local and global planner and shifts its planner params by the change of the mean, so it keeps its sampled offset. Three things stay fixed: an explicit `policy` of the spawn request, a planner named by the agent type, and a per-agent planner value. Pruning drops every local and global planner that no agent uses from the policy table, the wall and pool subscribers, and the module pool. The current defaults stay.
