@@ -85,6 +85,7 @@ from arena_humansim.core.agents.loader import resolve_agent_type_name
 from arena_humansim.core.agents.types import ATTENTION_KEYWORDS, AWARENESS_PRESETS, STAIRS_KINDS, ParamDist
 from arena_humansim.core.animation_kinds import AnimationType, locomotion_states
 from arena_humansim.core.behavior.compiler import BehaviorTreeFactory
+from arena_humansim.core.carry import Carrier
 from arena_humansim.core.despawn_monitor import DespawnMonitor
 from arena_humansim.core.formation.clearance import Clearance
 from arena_humansim.core.interaction_kinds import InteractionType, MembershipRole
@@ -500,6 +501,7 @@ class AgentManager(Node):
         self._declare_local_planner_params(type(self._local_planner))
         self._lp_means = self._read_lp_means()
         self._pinned: dict[int, _Pinned] = {}
+        self._carrier = Carrier()
         self._default_policy_idx: int = 0
         self._policy_names = [self._module_selections["local_planner"]]
         self._policy_name_to_idx = {self._module_selections["local_planner"]: 0}
@@ -1650,6 +1652,8 @@ class AgentManager(Node):
         default_layer = next(iter(self._perception_cache.values()), None)
         if default_layer is not None and default_layer.supports_pool:
             default_layer.compute_pool(pool)
+        self._carrier.update(pool, self._interaction_manager.carries(), self._dt)
+        self._carrier.exclude(pool)
 
         if is_bt_tick or any(len(a.perception) > 1 for a in agents):
             indptr = pool.neighbor_indptr
@@ -1735,6 +1739,7 @@ class AgentManager(Node):
         t0 = time.perf_counter()
         self._locomotion.restore(pool)
         pool.store_prev_vel()
+        self._carrier.hold_still(pool)
         n = pool.n
         active_mask = pool.policy_idx[:n] != -1
         if not np.any(active_mask):
@@ -1773,6 +1778,7 @@ class AgentManager(Node):
             pool.has_goal[:n] = saved_has_goal
             pool.vel[:n][~active_mask] = 0.0
 
+        self._carrier.transmit(pool)
         self._run_extra_modules(agents, TickPhase.PLAN)
         self._phase_end("local_plan", t0)
 
@@ -1846,6 +1852,7 @@ class AgentManager(Node):
         self._locomotion.constrain(pool, self._dt, self._provides_heading_mask(pool))
         self._apply_external_velocity_pins()
         self._zones.carry(pool)
+        self._carrier.steer(pool, self._dt)
         self._phase_end("kinematics", t0)
 
         t0 = time.perf_counter()
@@ -1860,7 +1867,9 @@ class AgentManager(Node):
         self._phase_end("integrate", t0)
 
         t0 = time.perf_counter()
+        self._carrier.before_collision(pool)
         self._collision.resolve(pool)
+        self._carrier.place(pool)
         self._park_seated(pool)
         self._phase_end("collision", t0)
 
@@ -2586,7 +2595,9 @@ class AgentManager(Node):
         msg.gait_phase = _flat("d", gait_phase)
         msg.gait_cadence = _flat("d", gait_cadence)
         im = self._interaction_manager
-        active = [im.active_interaction(aid) for aid in pool.agent_ids[rows].tolist()] if self._gesture_mode == GESTURE_ENABLED else [None] * len(rows)
+        active = [im.active_interaction(aid) for aid in pool.agent_ids[rows].tolist()]
+        if self._gesture_mode != GESTURE_ENABLED:  # a push stays on the wire, the pair's poses depend on it
+            active = [a if a is not None and a[1] == InteractionType.PUSH_WHEELCHAIR else None for a in active]
         msg.interaction_id = array.array("i", [a[0] if a is not None else -1 for a in active])
         msg.interaction_type = array.array("B", [int(a[1]) if a is not None else 0 for a in active])
         return msg
@@ -3017,6 +3028,7 @@ class AgentManager(Node):
         self._last_spawned_ids = []
         self._last_despawned_ids = []
         self._pinned.clear()
+        self._carrier.reset()
         self._publish_world_geometry()
 
     def _update_robot_callback(
