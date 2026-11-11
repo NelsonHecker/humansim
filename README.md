@@ -109,7 +109,7 @@ Every interaction follows a single flow: a BT `SeekNode` emits a SEEK command, I
 ## Spawning & Despawning
 
 - **Sources** come in two types. `type: poisson` (default) emits at the `rate_profile` and loses arrivals over `max_concurrent`. `type: max` holds `max_concurrent` agents alive, refilling on despawn, and takes no `rate_profile`. Both respect `max_total`.
-- **Sinks** absorb agents that reach them (within `absorption_radius`)
+- **Sinks** absorb the agents released for them once inside (within `absorption_radius`, or the polygon) and heading for them: a waypoint walker whose current waypoint lies in the sink, a behavior-tree agent whose moving navigate target lies in it. One passing through or standing in it stays
 - Agents are routed from source to sink via weighted `sink_affinity`
 - TTL-based removal as fallback
 
