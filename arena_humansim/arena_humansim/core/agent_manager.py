@@ -2618,11 +2618,15 @@ class AgentManager(Node):
             tuple(agent.params.name if agent is not None else "" for agent in agents),
             tuple(lifetime.source_name if lifetime is not None else "" for lifetime in lifetimes),
             tuple(lifetime.source_seq if lifetime is not None else 0 for lifetime in lifetimes),
+            tuple(self._pool.robot_awareness[self._own_rows()]),
+            tuple(self._pool.robot_repulsion_gain[self._own_rows()]),
+            tuple(self._pool.robot_fov_gain[self._own_rows()]),
+            tuple(self._pool.robot_reaction_gain[self._own_rows()]),
         )
         if content == self._meta_published:
             return
         self._meta_published = content
-        policies, _, agent_names, handedness, agent_types, source_names, source_seqs = content
+        policies, _, agent_names, handedness, agent_types, source_names, source_seqs, robot_awareness, robot_repulsion_gain, robot_fov_gain, robot_reaction_gain = content
         msg = AgentMetaMsg(header=header)
         msg.policies = list(policies)
         msg.agent_id = array.array("i", ids)
@@ -2631,6 +2635,10 @@ class AgentManager(Node):
         msg.agent_type = list(agent_types)
         msg.source_name = list(source_names)
         msg.source_seq = array.array("i", source_seqs)
+        msg.robot_awareness = array.array("f", robot_awareness)
+        msg.robot_repulsion_gain = array.array("f", robot_repulsion_gain)
+        msg.robot_fov_gain = array.array("f", robot_fov_gain)
+        msg.robot_reaction_gain = array.array("f", robot_reaction_gain)
         self._agent_meta_pub.publish(msg)
 
     def _publish_agent_gestures(self, header: Header) -> None:
