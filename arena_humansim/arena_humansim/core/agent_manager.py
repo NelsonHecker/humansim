@@ -2604,7 +2604,8 @@ class AgentManager(Node):
 
     def _publish_agent_meta(self, header: Header) -> None:
         self._meta_dirty = False
-        ids = self._pool.agent_ids[self._own_rows()].tolist()
+        rows = self._own_rows()
+        ids = self._pool.agent_ids[rows].tolist()
         names: dict[int, str] = {}
         for name, aid in self._agent_name_to_id.items():
             names.setdefault(aid, name)
@@ -2618,10 +2619,10 @@ class AgentManager(Node):
             tuple(agent.params.name if agent is not None else "" for agent in agents),
             tuple(lifetime.source_name if lifetime is not None else "" for lifetime in lifetimes),
             tuple(lifetime.source_seq if lifetime is not None else 0 for lifetime in lifetimes),
-            tuple(self._pool.robot_awareness[self._own_rows()]),
-            tuple(self._pool.robot_repulsion_gain[self._own_rows()]),
-            tuple(self._pool.robot_fov_gain[self._own_rows()]),
-            tuple(self._pool.robot_reaction_gain[self._own_rows()]),
+            tuple(self._pool.robot_awareness[rows]),
+            tuple(self._pool.robot_repulsion_gain[rows]),
+            tuple(self._pool.robot_fov_gain[rows]),
+            tuple(self._pool.robot_reaction_gain[rows]),
         )
         if content == self._meta_published:
             return
