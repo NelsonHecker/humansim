@@ -8,12 +8,14 @@ find_package(geometry_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/AgentDevices.msg"
   "msg/AgentFrame.msg"
   "msg/AgentGestures.msg"
   "msg/AgentMeta.msg"
   "msg/AgentState.msg"
   "msg/AgentStates.msg"
   "msg/AgentViz.msg"
+  "msg/DeviceState.msg"
   "msg/Gesture.msg"
   "msg/AgentTemplate.msg"
   "msg/FlowConfig.msg"
@@ -25,6 +27,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/PerceptionEvent.msg"
   "msg/PerceptionEvents.msg"
   "msg/RateKeyframe.msg"
+  "msg/RobotContact.msg"
+  "msg/RobotContacts.msg"
   "msg/RobotState.msg"
   "msg/Shape.msg"
   "msg/SinkAffinity.msg"

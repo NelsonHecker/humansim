@@ -28,3 +28,16 @@ pose:
   hold: {r: {radius: 0.0125, angle: -60}}  # grip on the cane: radius (m), angle in the palm (deg): along the index finger, toward the little-finger heel
   walk: {base: walk_whitecane}
   run: {same_as: walk}
+
+# Device: the long cane in the right fist (1.27 m, held 0.1 m below its top), fitted by Arena from profile walk_whitecane posed
+# on Common/Human/casual_female_caucasian_middleage_whitecane (python3 -m arena_simulation_setup.adapters.arena_animation_retarget.devices, within 7 mm): tip ahead 0.93-1.09 m sweeping
+# +-0.30 m across the path, lifted 4 cm between touches. Robots touching it: core/devices.py.
+device:
+  kind: cane
+  model: Common/Object/WhiteCane
+  grip: {x: 0.3, y: -0.1, z: 0.9}
+  tip:
+    x: {mean: 1.0329, harmonics: [[0.0424, -0.2617], [0.0554, 1.0478], [0.0017, 2.3437], [0.0013, -2.6336]]}
+    y: {mean: -0.0002, harmonics: [[0.2998, 2.8798]]}
+    z: {mean: 0.0201, harmonics: [[0.0001, 2.546], [0.02, 1.0479]]}
+  radius: 0.0125

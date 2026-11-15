@@ -234,6 +234,7 @@ Config format and stage semantics: [`config/benchmark/README.md`](arena_humansim
 | `contact_mode` | `enabled` | `enabled` or `locomotion_only`, how contact interactions play out |
 | `locomotion_standing_distance` | `1.2` | Standing distance (m) of a locomotion-only contact pair |
 | `gesture_mode` | `enabled` | `enabled` or `disabled`, whether agents play gestures |
+| `robot_contact.robot_radius`, `robot_contact.robot_height` | `0.0`, `0.0` | Robot disk radius (m) of robot contacts, `0` = each robot's own radius; robot height (m), a held cane touches a robot only below it, `0` = at every height. Both apply at once |
 | `record_bag`, `record_dir` | `false`, `""` | Record the run to a rosbag in `record_dir`, empty = default recording directory |
 | `strict_recording` | `true` | Abort the trial when a second publisher appears on a recorded contract topic |
 | `trial_id` | `""` | Opaque id written into the recording manifest |
@@ -254,6 +255,7 @@ A `set_parameters` call on a running node is validated and stored at once and ta
 | `publish_markers` | The marker level changes. `0` deletes the published markers |
 | `seed` | Nothing at a soft `reset`, which keeps the RNG. The next plain `reset` or `remove_agents` with no ids re-roots every stream on it, so the next crowd draws as a first crowd with that seed does |
 | `rtf` | Master mode only, retimes the tick timer |
+| `robot_contact.robot_radius`, `robot_contact.robot_height` | Nothing more, the set applies them at once to the next contact test |
 
 Re-seating moves every live agent that follows the defaults onto the current local and global planner and shifts its planner params by the change of the mean, so it keeps its sampled offset. Three things stay fixed: an explicit `policy` of the spawn request, a planner named by the agent type, and a per-agent planner value. Pruning drops every local and global planner that no agent uses from the policy table, the wall and pool subscribers, and the module pool. The current defaults stay.
 
@@ -265,7 +267,9 @@ Re-seating moves every live agent that follows the defaults onto the current loc
 - `agent_gestures` (`AgentGestures`, latched) - active gestures with their owner, sent when they change
 - `interactions` (`InteractionFrame`, latched) - every FORMING or ACTIVE interaction with its type, outcome, anchor object, arrival and hold state, duration and members (participants, then the queue in FIFO order, each with its `MembershipRole` and object seat index, -1 for none), plus the lifecycle edges (`InteractionEvent`) fired on that tick. Sent when any of it changes or an edge fires, stamped like the frame of the same tick. An agent can be a member of several interactions
 - `viz_state` (`AgentViz`) - per-tick marker inputs while `publish_markers >= 1`, drawn into `viz` by `arena_humansim_viz_node` (started by the launch file, its `output_topic`, `offset_x` and `offset_y` parameters retarget and shift the markers at runtime, `robot_bodies: false` drops the body and heading of robot-kind agents). One message with `level: 0` clears the markers when the level drops to 0. The engine builds the per-tick message only while the topic has a subscriber, and `arena_humansim_viz_node` subscribes only while its output topic has one (checked once per second)
-- `viz`, `viz_static/<bucket>` (`MarkerArray`) - infrastructure and module markers drawn by the engine itself. Module markers are drawn only while `viz` has a subscriber
+- `viz`, `viz_static/<bucket>` (`MarkerArray`) - infrastructure and module markers drawn by the engine itself, plus held devices (ns `devices`) and ongoing robot contact points (ns `robot_contacts`). Module markers are drawn only while `viz` has a subscriber
+- `agent_devices` (`AgentDevices`) - every held assistive device (agent type `device:`) posed from its holder's gait phase: a cane's shaft, a rollator's or walking frame's footprint, and the object model renderers draw. Built only while the topic has a subscriber
+- `robot_contacts` (`RobotContacts`, reliable) - a START edge when a robot disk starts touching a human's body disk or held device and an END edge when it stops: part (`body`, `cane`, `rollator`, `walking_frame`), robot and agent ids, names and agent type, the part's point nearest the robot, overlap depth (END: the deepest), duration, both poses and the device as posed. Contact is tested in plan view after collision resolution, see `robot_contact.*`
 
 **Subscribes:**
 - `world_state` (`AgentStates`) - poses of externally driven robots and possessed pedestrians. A robot fed without a velocity takes the one between its last two poses, from their header stamps: zero when the stamps are more than 0.2 s apart or do not advance, or when the pose jumped faster than 10 m/s. It keeps that velocity for 0.2 s after the last message. A robot declared in the scenario moves by the feed alone while it is fed, and its own policy takes over again 2 s after the last message
