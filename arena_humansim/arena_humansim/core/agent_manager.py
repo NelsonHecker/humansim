@@ -505,6 +505,8 @@ class AgentManager(Node):
         self._tick_count: int = 0
         self._sim_time_ns: int = 0
         self._subsystem_epoch_ns: int = 0
+        self._last_clock_ns: int = -1
+        self._last_frame: AgentFrameMsg | None = None
         self._pending_scenario_spawns: deque[tuple[int, AgentStateMsg]] = deque()
         self._scenario_awareness_overrides: dict[int, AwarenessSpec] = {}
         self._pending_stimuli: deque[tuple[int, int, str, float]] = deque()
@@ -1773,6 +1775,7 @@ class AgentManager(Node):
         self._update_animation_states()
         frame = self._build_agent_frame()
         self._agent_states_pub.publish(frame)
+        self._last_frame = frame
         if self._meta_dirty:
             self._publish_agent_meta(frame.header)
         if self._gestures_dirty or is_bt_tick:
@@ -2213,7 +2216,11 @@ class AgentManager(Node):
         covered = (now_ns - self._subsystem_epoch_ns) // dt_ns + 1
         owed = covered - self._tick_count
         if owed <= 0:
+            if now_ns <= self._last_clock_ns and self._last_frame is not None:
+                self._agent_states_pub.publish(self._last_frame)
+            self._last_clock_ns = max(self._last_clock_ns, now_ns)
             return
+        self._last_clock_ns = now_ns
         t0 = time.perf_counter()
         for _ in range(owed):
             self._sim_time_ns = self._tick_count * dt_ns
