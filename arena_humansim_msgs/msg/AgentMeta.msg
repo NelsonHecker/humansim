@@ -7,3 +7,8 @@ string[] handedness          # l | r, empty = right
 string[] agent_type          # agent type name, empty = adult
 string[] source_name         # releasing flow source, empty = spawned directly
 int32[] source_seq           # release index within source_name
+float32[] robot_range_offset    # robot range shift, m; capped at vision_range
+float32[] robot_fov_offset      # robot field-of-view shift, degrees
+float32[] robot_repulsion_gain  # repulsion gain against robots, 1 = nominal
+float32[] robot_reaction_gain   # reaction-range gain vs robots, 1 = nominal
+bool[] robot_blind              # true = robots are invisible to the agent

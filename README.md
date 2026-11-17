@@ -244,7 +244,7 @@ Re-seating moves every live agent that follows the defaults onto the current loc
 
 **Publishes:**
 - `agent_states` (`AgentFrame`) - per-tick positions, velocities, radii, kinds, animation states and policy indices of the engine's own agents, one array per field
-- `agent_meta` (`AgentMeta`, latched) - policy table plus name, handedness, agent type, releasing source and release index per agent, sent when it changes and at every reset, stamped like the frame of the same tick
+- `agent_meta` (`AgentMeta`, latched) - policy table plus name, handedness, agent type, releasing source and release index per agent, and the robot awareness each agent got (range offset in m, field-of-view offset in degrees, repulsion and reaction gains, blind flag), sent when it changes and at every reset, stamped like the frame of the same tick
 - `agent_gestures` (`AgentGestures`, latched) - active gestures with their owner, sent when they change
 - `interactions` (`InteractionFrame`, latched) - every FORMING or ACTIVE interaction with its type, outcome, anchor object, arrival and hold state, duration and members (participants, then the queue in FIFO order, each with its `MembershipRole` and object seat index, -1 for none), plus the lifecycle edges (`InteractionEvent`) fired on that tick. Sent when any of it changes or an edge fires, stamped like the frame of the same tick. An agent can be a member of several interactions
 - `viz_state` (`AgentViz`) - per-tick marker inputs while `publish_markers >= 1`, drawn into `viz` by `arena_humansim_viz_node` (started by the launch file, its `output_topic`, `offset_x` and `offset_y` parameters retarget and shift the markers at runtime, `robot_bodies: false` drops the body and heading of robot-kind agents). One message with `level: 0` clears the markers when the level drops to 0. The engine builds the per-tick message only while the topic has a subscriber, and `arena_humansim_viz_node` subscribes only while its output topic has one (checked once per second)
@@ -261,7 +261,7 @@ Re-seating moves every live agent that follows the defaults onto the current loc
 - `set_teleport_zones` - replace the teleport zones, an empty list removes them all. Duplicate names, a destination naming no zone, an unknown `kind` or a stair without a footprint reject the call
 - `set_zone_access` - open or close teleport zones by name, an unknown name rejects the call
 - `teleport_agents` - move agents to new poses with zero velocity, ending a rider's transfer. An unknown id rejects the call and moves no one
-- `set_flow` — bulk configure sources, sinks, walls
+- `set_flow` — bulk configure sources, sinks, walls. A source's `agent.robot_awareness` text is a preset name, or JSON for a shift mapping or a weighted list; empty keeps the agent type's own awareness
 - `notify_stimulus` - drive a need on one agent (or `-1` for all) after its reaction time, a broadcast level also seeds agents spawned later
 - `reset` - clear all simulation state, or with `soft: true` keep it and only apply stored params, re-seat agents, and prune unused planners
 
