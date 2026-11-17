@@ -663,7 +663,6 @@ def sample_agent_type(
     rng: np.random.Generator,
     default_local_planner: str = "sfm",
     local_planner_means: Mapping[str, float] | None = None,
-    awareness: AwarenessSpec | None = None,
 ) -> SampledParams:
     sampled_needs: dict[str, SampledNeed] = {}
     for need_name, need_dist in agent_type.needs.items():
@@ -705,7 +704,7 @@ def sample_agent_type(
             repulsion_rel_sd=_relative_spread(awareness_dists["repulsion_strength"]),
             reaction_rel_sd=_relative_spread(awareness_dists["repulsion_range"]),
         ),
-        sample_awareness(awareness if awareness is not None else agent_type.perception.robot_awareness, rng),
+        sample_awareness(agent_type.perception.robot_awareness, rng),
     )
 
     idle_gaze_rate_hz = _sample_dist(agent_type.idle_gaze_rate, rng)

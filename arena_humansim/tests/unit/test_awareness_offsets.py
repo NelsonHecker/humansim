@@ -65,13 +65,15 @@ def test_blind_preset_sets_the_blind_flag() -> None:
     assert with_robot_awareness(_base_perception(), draw).robot_blind is True
 
 
-def test_sample_agent_type_uses_the_awareness_argument_over_the_type_default() -> None:
+def test_override_awareness_scales_by_the_sampled_type_spreads() -> None:
     adult = load_agent_type_from_file(CONFIG_DIR / "adult.yaml")
-    params = sample_agent_type(adult, np.random.default_rng(3), awareness=AWARENESS_PRESETS["scared"])
-    assert params.perception.vision_range_sd == pytest.approx(0.5)
-    assert params.perception.repulsion_rel_sd == pytest.approx(0.2 / 2.1)
-    assert params.perception.robot_repulsion_gain == pytest.approx(1.0 + 2.0 * 0.2 / 2.1)
-    assert params.perception.robot_reaction_gain == pytest.approx(1.0)
+    params = sample_agent_type(adult, np.random.default_rng(3))
+    rng = np.random.default_rng(3)
+    perception = with_robot_awareness(params.perception, sample_awareness(AWARENESS_PRESETS["scared"], rng))
+    assert perception.vision_range_sd == pytest.approx(0.5)
+    assert perception.repulsion_rel_sd == pytest.approx(0.2 / 2.1)
+    assert perception.robot_repulsion_gain == pytest.approx(1.0 + 2.0 * 0.2 / 2.1)
+    assert perception.robot_reaction_gain == pytest.approx(1.0)
 
 
 def test_sample_agent_type_without_argument_uses_the_type_awareness() -> None:
