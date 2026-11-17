@@ -72,7 +72,7 @@ def test_live_head_on_encounter_sfm_blind_vs_aware():
     # Aware human yields and decelerates much earlier than blind human:
     # At tick 60, blind human has rushed forward to x=2.56 with velocity ~1.0,
     # whereas normal human has decelerated to vel ~0.59 (x=2.46),
-    # and scared human has halted/reversed to vel ~0.15 (x=2.33).
+    # and scared human has yielded furthest back to x=2.32.
     x_blind_t60 = traj_blind[60][0]
     x_normal_t60 = traj_normal[60][0]
     x_scared_t60 = traj_scared[60][0]

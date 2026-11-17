@@ -8,7 +8,7 @@ from arena_humansim.utils.types import AgentTemplate, Pose2D, Shape, SourceConfi
 
 def test_preset_draw_is_the_preset_shift() -> None:
     draw = sample_awareness(AWARENESS_PRESETS["distracted"], np.random.default_rng(1))
-    assert (draw.detection, draw.fov, draw.repulsion, draw.reaction, draw.blind) == (-2.0, -1.0, -1.0, -1.0, False)
+    assert (draw.detection, draw.fov, draw.repulsion, draw.reaction, draw.blind) == (-5.0, -8.0, -3.0, -3.0, False)
 
 
 def test_normal_distribution_shift_stays_inside_its_clip() -> None:
