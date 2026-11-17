@@ -201,7 +201,7 @@ def test_builtin_registry_resolves_extends_like_the_file_loader(name: str) -> No
 
 
 
-@pytest.mark.parametrize(("name", "kind"), [("blind_white_cane", "cane"), ("blind_rolling_cane", "cane"), ("elder_rollator", "rollator"), ("patient_walking_frame", "walking_frame")])
+@pytest.mark.parametrize(("name", "kind"), [("blind_white_cane", "cane"), ("blind_rolling_cane", "cane"), ("elder_rollator", "rollator"), ("patient_walking_frame", "walking_frame"), ("patient_iv_pole", "iv_stand")])
 def test_shipped_device_blocks_pass_through(name: str, kind: str) -> None:
     assert load_agent_type_from_file(CONFIG_DIR / f"{name}.yaml").device["kind"] == kind
 
