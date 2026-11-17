@@ -34,3 +34,19 @@ def test_source_awareness_text_can_carry_a_crowd_mixture_with_distributions() ->
 def test_source_awareness_text_that_does_not_parse_is_rejected() -> None:
     with pytest.raises(ValueError):
         AgentManager._source_msg_to_config(_source_msg('{"detection": '))
+
+
+@pytest.mark.parametrize(
+    ("text", "match"),
+    [
+        ('{"detection": {"mean": 0.0, "sd": 1.0}}', "unknown robot awareness distribution field 'sd'"),
+        ('{"detection": {"mean": "far"}}', "distribution values must be numbers"),
+        ('{"detection": {"mean": 0.0, "std": -1.0}}', "std must be non-negative"),
+        ('[{"weight": null, "awareness": "normal"}]', "mixture weights must be numbers"),
+        ('{"blind": "false"}', "blind must be true or false"),
+    ],
+    ids=["typo_key", "text_value", "negative_std", "null_weight", "text_blind"],
+)
+def test_source_awareness_text_with_malformed_values_is_a_value_error(text: str, match: str) -> None:
+    with pytest.raises(ValueError, match=match):
+        AgentManager._source_msg_to_config(_source_msg(text))

@@ -80,6 +80,9 @@ def _as_paramdist(val: object) -> "ParamDist | None":
     return val  # type: ignore[return-value]
 
 
+_DIST_FIELDS: tuple[str, ...] = ("mean", "std", "clip_low", "clip_high")
+
+
 def _as_shift_dist(val: object) -> ParamDist:
     if isinstance(val, ParamDist):
         return val
@@ -87,11 +90,25 @@ def _as_shift_dist(val: object) -> ParamDist:
         v = float(val)
         return ParamDist(mean=v, std=0.0, clip_low=v, clip_high=v)
     if isinstance(val, Mapping) and "mean" in val:
-        d = dict(val)
+        unknown = sorted(str(key) for key in val if key not in _DIST_FIELDS)
+        if unknown:
+            raise ValueError(f"unknown robot awareness distribution field {unknown[0]!r}; valid fields: {', '.join(_DIST_FIELDS)}")
+        try:
+            d = {str(key): float(value) for key, value in val.items()}
+        except (TypeError, ValueError):
+            raise ValueError(f"robot awareness distribution values must be numbers, got {dict(val)!r}") from None
+        if d.get("std", 0.0) < 0.0:
+            raise ValueError(f"robot awareness distribution std must be non-negative, got {d['std']!r}")
         d.setdefault("clip_low", -math.inf)
         d.setdefault("clip_high", math.inf)
         return ParamDist(**d)
     raise ValueError(f"robot awareness shift must be a number or a mapping with a mean, got {val!r}")
+
+
+def _as_blind(val: object) -> bool:
+    if not isinstance(val, bool):
+        raise ValueError(f"robot awareness blind must be true or false, got {val!r}")
+    return val
 
 
 @attrs.frozen
@@ -100,7 +117,7 @@ class AwarenessShift:
     fov: ParamDist = attrs.field(default=ParamDist(0.0, clip_low=0.0, clip_high=0.0), converter=_as_shift_dist)
     repulsion: ParamDist = attrs.field(default=ParamDist(0.0, clip_low=0.0, clip_high=0.0), converter=_as_shift_dist)
     reaction: ParamDist = attrs.field(default=ParamDist(0.0, clip_low=0.0, clip_high=0.0), converter=_as_shift_dist)
-    blind: bool = False
+    blind: bool = attrs.field(default=False, converter=_as_blind)
 
 
 @attrs.frozen
@@ -127,7 +144,10 @@ def _as_mixture(items: Sequence[object]) -> AwarenessMixture:
     for item in items:
         if not isinstance(item, Mapping) or "awareness" not in item:
             raise ValueError(f"robot awareness mixture entries need an awareness key, got {item!r}")
-        weight = float(item.get("weight", 1.0))
+        try:
+            weight = float(item.get("weight", 1.0))
+        except (TypeError, ValueError):
+            raise ValueError(f"mixture weights must be numbers, got {item.get('weight')!r}") from None
         if weight < 0.0:
             raise ValueError(f"mixture weights must be non-negative and sum above zero, got {weight!r}")
         shift = as_awareness_spec(item["awareness"])
