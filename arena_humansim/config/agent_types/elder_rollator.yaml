@@ -35,5 +35,5 @@ pose:
 device:
   kind: rollator
   model: Common/Object/RollatorFitted
-  origin: {x: 0.36, y: 0.0, z: 0.0015}
+  origin: {x: 0.36, y: 0.0, z: 0.0}
   size: {length: 0.6887, width: 0.5708, height: 0.8794, ahead: 0.0008, left: 0.0}
