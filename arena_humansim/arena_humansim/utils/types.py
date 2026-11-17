@@ -366,6 +366,11 @@ class SpawnRequest:
     waypoints: list[Pose2D] = attrs.Factory(list)
     lifetime: AgentLifetime = attrs.Factory(AgentLifetime)
     robot_awareness: Any = None
+    waypoint_radii: list[float] = attrs.Factory(list)
+    waypoint_mode: WaypointMode = WaypointMode.REPEAT
+
+    def waypoint_movement(self) -> WaypointMovement:
+        return WaypointMovement(waypoints=list(self.waypoints), radii=list(self.waypoint_radii), mode=self.waypoint_mode)
 
 
 @attrs.define

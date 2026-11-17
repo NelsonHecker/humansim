@@ -1335,7 +1335,9 @@ class AgentManager(Node):
         spec = _resolve_awareness(spawn_req.robot_awareness, None)
         if spec is not None:
             self._scenario_awareness_overrides[aid] = spec
-        return self._build_base_agent(aid, agent_msg, list(spawn_req.waypoints))
+        agent = self._build_base_agent(aid, agent_msg, list(spawn_req.waypoints))
+        agent.movement = spawn_req.waypoint_movement()
+        return agent
 
     def _apply_awareness_overrides(self, aid: int, idx: int, agent: BaseAgent) -> None:
         if aid not in self._scenario_awareness_overrides:
