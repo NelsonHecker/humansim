@@ -31,7 +31,7 @@ pose:
 
 # Device: the long cane in the right fist (1.27 m, held 0.1 m below its top), fitted by Arena from profile walk_whitecane posed
 # on Common/Human/casual_female_caucasian_middleage_whitecane (python3 -m arena_simulation_setup.adapters.arena_animation_retarget.devices, within 7 mm): tip ahead 0.93-1.09 m sweeping
-# +-0.30 m across the path, lifted 4 cm between touches. Robots touching it: core/devices.py.
+# +-0.30 m across the path, lifted 4 cm between touches.
 device:
   kind: cane
   model: Common/Object/WhiteCane

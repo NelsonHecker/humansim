@@ -198,3 +198,16 @@ def test_builtin_registry_resolves_extends_like_the_file_loader(name: str) -> No
     from_file = load_agent_type_from_file(CONFIG_DIR / f"{name}.yaml")
     assert attrs.evolve(BUILTIN_AGENTS[name], source_path=from_file.source_path) == from_file
     assert BUILTIN_AGENTS[name].perception == BUILTIN_AGENTS["adult"].perception
+
+
+
+@pytest.mark.parametrize(("name", "kind"), [("blind_white_cane", "cane"), ("blind_rolling_cane", "cane"), ("elder_rollator", "rollator"), ("patient_walking_frame", "walking_frame")])
+def test_shipped_device_blocks_pass_through(name: str, kind: str) -> None:
+    assert load_agent_type_from_file(CONFIG_DIR / f"{name}.yaml").device["kind"] == kind
+
+
+def test_a_device_block_is_inherited_whole_and_defaults_to_none() -> None:
+    device = {"kind": "cane", "grip": {"x": 0.3, "y": -0.1, "z": 0.9}, "tip": {"x": 1.0, "y": 0.0, "z": 0.0}, "radius": 0.0125}
+    merged = resolve_extends({"child": {"name": "child", "extends": "parent", "perception": {"robot_awareness": 0.0}}}, {"parent": {"name": "parent", "device": device}})
+    assert merged["child"]["device"] == device
+    assert AgentType(name="plain").device == {}

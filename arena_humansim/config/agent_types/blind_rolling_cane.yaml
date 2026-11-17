@@ -31,7 +31,7 @@ pose:
 
 # Device: the long cane in the right fist (1.27 m, held 0.1 m below its top), fitted by Arena from profile walk_rollingcane
 # posed on Common/Human/casual_male_asian_young_rollingcane (python3 -m arena_simulation_setup.adapters.arena_animation_retarget.devices, within 8 mm): tip ahead 0.93-1.05 m rolling
-# +-0.30 m across the path on the floor. Robots touching it: core/devices.py.
+# +-0.30 m across the path on the floor.
 device:
   kind: cane
   model: Common/Object/RollingCane

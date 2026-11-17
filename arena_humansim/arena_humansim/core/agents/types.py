@@ -44,7 +44,6 @@ from typing import overload
 import attrs
 import numpy as np
 
-from arena_humansim.core.devices import DeviceSpec, as_device
 from arena_humansim.utils.types import FormationSpec, Pose2D
 
 
@@ -558,7 +557,7 @@ class AgentType:
     tunes: tuple[ConditionalTune, ...] = ()
     vars: dict[str, VarDef] = attrs.Factory(dict)
     extends: str | None = None
-    device: DeviceSpec | None = attrs.field(default=None, converter=as_device)  # held assistive device (core/devices.py)
+    device: dict = attrs.Factory(dict)  # held assistive device, passed through to the renderer like `pose`
 
     source_path: Path | None = attrs.field(default=None, eq=False, hash=False, repr=False)
 
@@ -629,7 +628,6 @@ class SampledParams:
 
     idle_gaze_rate_hz: float = 0.0
     handedness: str = "r"
-    device: DeviceSpec | None = None
 
 
 _HANDS = {"right": "r", "r": "r", "left": "l", "l": "l"}
@@ -746,5 +744,4 @@ def sample_agent_type(
         utility_weights=dict(agent_type.utility_weights),
         idle_gaze_rate_hz=idle_gaze_rate_hz,
         handedness=handedness,
-        device=agent_type.device,
     )

@@ -10,13 +10,10 @@ from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import ColorRGBA
 from visualization_msgs.msg import Marker, MarkerArray
 
-from arena_humansim.core.devices import CANE
-
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Sequence
+    from collections.abc import Iterable
 
     from arena_humansim.core.agent_manager import ObstacleData
-    from arena_humansim.core.devices import DevicePose
     from arena_humansim.core.world_knowledge import WorldObject
     from arena_humansim.global_planner import GlobalPlanner
     from arena_humansim.local_planner import LocalPlanner
@@ -447,38 +444,6 @@ def publish_infrastructure(
             m.scale.z = 0.15
             m.color = _C_OBST_LBL
             m.text = label
-
-
-_C_CANE = rgba(0.95, 0.95, 0.95, 1.0)
-_C_DEVICE = rgba(0.3, 0.55, 0.9, 0.45)
-_C_CONTACT = rgba(1.0, 0.1, 0.1, 0.9)
-
-
-def publish_device_markers(pub: MarkerPublisher, devices: Iterable[DevicePose], contacts: Iterable[Sequence[float]]) -> None:
-    """Held devices (ns `devices`: a cane's shaft, a rollator's or walking frame's footprint volume) and the points of the
-    ongoing robot contacts (ns `robot_contacts`)."""
-    pub.touch_ns("devices")
-    pub.touch_ns("robot_contacts")
-    for dev in devices:
-        if dev.kind == CANE:
-            m, _ = pub.get("devices", dev.agent_id, Marker.LINE_STRIP)
-            m.type = Marker.LINE_STRIP
-            m.points = [Point(x=float(p[0]), y=float(p[1]), z=float(p[2])) for p in (dev.start, dev.end)]
-            m.scale.x = max(2.0 * dev.radius, 0.02)
-            m.color = _C_CANE
-            continue
-        m, _ = pub.get("devices", dev.agent_id, Marker.CUBE)
-        m.type = Marker.CUBE
-        m.points = []
-        m.pose.position.x, m.pose.position.y, m.pose.position.z = float(dev.centre[0]), float(dev.centre[1]), float(dev.start[2] + dev.height / 2.0)
-        m.pose.orientation.z, m.pose.orientation.w = math.sin(dev.yaw / 2.0), math.cos(dev.yaw / 2.0)
-        m.scale.x, m.scale.y, m.scale.z = 2.0 * dev.half[0], 2.0 * dev.half[1], dev.height
-        m.color = _C_DEVICE
-    for i, (x, y, z) in enumerate(contacts):
-        m, _ = pub.get("robot_contacts", i, Marker.SPHERE)
-        m.pose.position.x, m.pose.position.y, m.pose.position.z = float(x), float(y), float(z)
-        m.scale.x = m.scale.y = m.scale.z = 0.12
-        m.color = _C_CONTACT
 
 
 def publish_module_markers(pub: MarkerPublisher, modules: Iterable[Perception | GlobalPlanner | LocalPlanner]) -> None:

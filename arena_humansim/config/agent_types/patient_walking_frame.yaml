@@ -33,7 +33,7 @@ pose:
 # Device: the walking frame under both hands, fitted by Arena from profile walk_walkingframe posed on
 # Hospital/Human/patient_female_asian_old (python3 -m arena_simulation_setup.adapters.arena_animation_retarget.devices, within 3 mm): the footprint of Common/Object/WalkerFitted
 # (0.41 x 0.50 m, 0.67 m high), its origin under the hands' middle 0.25-0.47 m ahead and lifted up to 9 cm while it is
-# carried forward. Robots touching it: core/devices.py.
+# carried forward.
 device:
   kind: walking_frame
   model: Common/Object/WalkerFitted

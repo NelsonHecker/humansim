@@ -14,20 +14,16 @@ import rclpy
 import rclpy.executors
 import rclpy.subscription
 import rclpy.timer
-from arena_humansim_msgs.msg import AgentDevices as AgentDevicesMsg
 from arena_humansim_msgs.msg import AgentFrame as AgentFrameMsg
 from arena_humansim_msgs.msg import AgentGestures as AgentGesturesMsg
 from arena_humansim_msgs.msg import AgentMeta as AgentMetaMsg
 from arena_humansim_msgs.msg import AgentState as AgentStateMsg
 from arena_humansim_msgs.msg import AgentStates as AgentStatesMsg
 from arena_humansim_msgs.msg import AgentViz as AgentVizMsg
-from arena_humansim_msgs.msg import DeviceState as DeviceStateMsg
 from arena_humansim_msgs.msg import Gesture as GestureMsg
 from arena_humansim_msgs.msg import InteractionEvent as InteractionEventMsg
 from arena_humansim_msgs.msg import InteractionFrame as InteractionFrameMsg
 from arena_humansim_msgs.msg import ObstacleConfig as ObstacleConfigMsg
-from arena_humansim_msgs.msg import RobotContact as RobotContactMsg
-from arena_humansim_msgs.msg import RobotContacts as RobotContactsMsg
 from arena_humansim_msgs.msg import Shape as ShapeMsg
 from arena_humansim_msgs.msg import SinkConfig as SinkConfigMsg
 from arena_humansim_msgs.msg import SourceConfig as SourceConfigMsg
@@ -91,19 +87,18 @@ from arena_humansim.core.animation_kinds import AnimationType, locomotion_states
 from arena_humansim.core.behavior.compiler import BehaviorTreeFactory
 from arena_humansim.core.carry import Carrier
 from arena_humansim.core.despawn_monitor import DespawnMonitor
-from arena_humansim.core.devices import START, ContactEdge, DeviceExtension, DevicePose, Disk, RobotContactMonitor
 from arena_humansim.core.formation.clearance import Clearance
 from arena_humansim.core.interaction_kinds import InteractionType, MembershipRole
 from arena_humansim.core.interaction_manager import InteractionEdge, InteractionManager, InteractionRow, check_gesture_mode
 from arena_humansim.core.locomotion import LocomotionExtension
 from arena_humansim.core.logger import SimulationLogger
-from arena_humansim.core.pool import KIND_HUMAN, KIND_ROBOT, AgentPool, PoolAware
+from arena_humansim.core.pool import KIND_ROBOT, AgentPool, PoolAware
 from arena_humansim.core.recorder import BagRecorder, default_record_dir
 from arena_humansim.core.replay import ReplayManager, ReplayResult
 from arena_humansim.core.robot_services import RobotServiceAdvertiser
 from arena_humansim.core.spawn_scheduler import SpawnScheduler
 from arena_humansim.core.teleport_zones import TeleportZones, Zone
-from arena_humansim.core.viz import MarkerPublisher, publish_device_markers, publish_infrastructure, publish_module_markers
+from arena_humansim.core.viz import MarkerPublisher, publish_infrastructure, publish_module_markers
 from arena_humansim.core.world_knowledge import FormationSpec, WorldKnowledge, WorldObject
 from arena_humansim.global_planner import GlobalPlanner
 from arena_humansim.local_planner import LocalPlanner
@@ -274,8 +269,6 @@ _RECONFIGURABLE_PARAMS = _TUNABLE_PARAMS | {
     "contact_mode",
     "locomotion_standing_distance",
     "gesture_mode",
-    "robot_contact.robot_radius",
-    "robot_contact.robot_height",
     # takes effect at the next reset or remove-all, the running crowd keeps its streams
     "seed",
 }
@@ -415,21 +408,6 @@ PRONE_RADIUS = 0.9  # half a body length, the disc a lying agent occupies
 SEAT_RISE_S = 1.5  # s, a released agent stays where it stood while its body gets up
 
 
-_DEVICE_REACH = 1.6  # m: farthest a held device reaches beyond its holder's body disk, with margin (a long cane: ~1.1)
-
-
-def _disk(pool: AgentPool, row: int) -> Disk:
-    return Disk(int(pool.agent_ids[row]), float(pool.pos[row, 0]), float(pool.pos[row, 1]), float(pool.theta[row]), float(pool.agent_radius[row]))
-
-
-def _device_msg(dev: DevicePose) -> DeviceStateMsg:
-    msg = DeviceStateMsg(agent_id=dev.agent_id, kind=dev.kind, model=dev.model, yaw=float(dev.yaw), radius=float(dev.radius))
-    for point, xyz in ((msg.start, dev.start), (msg.end, dev.end), (msg.centre, dev.centre)):
-        point.x, point.y, point.z = (float(v) for v in xyz)
-    msg.size.x, msg.size.y, msg.size.z = 2.0 * dev.half[0], 2.0 * dev.half[1], float(dev.height)
-    return msg
-
-
 def _gesture_msg(intent: GestureIntent) -> GestureMsg:
     g = GestureMsg()
     g.slot = intent.slot
@@ -534,7 +512,6 @@ class AgentManager(Node):
             float(self._float_param("locomotion_standing_distance")),
         )
         self._gesture_mode = check_gesture_mode(str(self.get_parameter("gesture_mode").value))
-        self._robot_contacts = RobotContactMonitor(self._float_param("robot_contact.robot_radius"), self._float_param("robot_contact.robot_height"))
         self.add_on_set_parameters_callback(self._on_contact_params)
         self._animation = MotionAnimation.create(
             self._module_selections["animation"],
@@ -544,8 +521,6 @@ class AgentManager(Node):
         )
         self._clearance = Clearance()
         self._locomotion = LocomotionExtension()
-        self._devices = DeviceExtension()
-        self._contact_labels: dict[tuple[int, int], tuple[str, str, str]] = {}  # (robot id, agent id) -> (robot name, agent name, agent type) of an ongoing contact
         self._wall_aware: tuple[WallAware, ...] = (
             self._local_planner,
             self._global_planner,
@@ -561,7 +536,6 @@ class AgentManager(Node):
             self._occluder,
             self._clearance,
             self._locomotion,
-            self._devices,
             *self._perception_cache.values(),
         )
 
@@ -648,8 +622,6 @@ class AgentManager(Node):
         )
 
         self._interactions_pub = self.create_publisher(InteractionFrameMsg, "interactions", QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.TRANSIENT_LOCAL))
-        self._agent_devices_pub = self.create_publisher(AgentDevicesMsg, "agent_devices", 10)
-        self._robot_contacts_pub = self.create_publisher(RobotContactsMsg, "robot_contacts", QoSProfile(depth=100, reliability=ReliabilityPolicy.RELIABLE))
 
         self._world_geometry_pub = self.create_publisher(
             WorldGeometryMsg,
@@ -1917,7 +1889,6 @@ class AgentManager(Node):
             self._interactions_published = table
             self._interactions_had_edges = bool(edges)
             self._interactions_pub.publish(_interaction_frame(frame.header, table, edges))
-        devices = self._step_devices(pool, frame.header)
 
         if self._marker_pub is not None and self._publish_markers > 0:
             pool.sync_back(agents)
@@ -1932,7 +1903,6 @@ class AgentManager(Node):
                 self._world_knowledge._objects,
                 self._obstacles,
             )
-            publish_device_markers(self._marker_pub, devices.values(), [c.point for c in self._robot_contacts.active.values()])
             if mlvl >= 2 and self._marker_pub.watched:
                 modules: list[Perception | GlobalPlanner | LocalPlanner] = list(self._perception_cache.values())
                 modules.append(self._global_planner)
@@ -1960,56 +1930,6 @@ class AgentManager(Node):
                 self._phase_accum.setdefault(name, []).append(ms)
             if self._profile_interval > 0 and self._tick_count % self._profile_interval == 0:
                 self._flush_profile()
-
-    def _step_devices(self, pool: AgentPool, header: Header) -> dict[int, DevicePose]:
-        """Pose the held devices from the gait phase, publish them, and publish the robot contact edges of this tick."""
-        rows = self._devices.rows()
-        devices = self._devices.pose(rows, self._locomotion.warped_phase(rows)) if len(rows) else {}
-        if devices and self._agent_devices_pub.get_subscription_count() > 0:
-            self._agent_devices_pub.publish(AgentDevicesMsg(header=header, devices=[_device_msg(d) for d in devices.values()]))
-        n = pool.n
-        robots = np.flatnonzero(pool.kind[:n] == KIND_ROBOT)
-        if len(robots) == 0 and not self._robot_contacts.active:
-            return devices
-        humans = np.flatnonzero(pool.kind[:n] == KIND_HUMAN)
-        near = np.zeros(len(humans), dtype=np.bool_)
-        for r in robots:  # robots and agents a device's length apart at most, the monitor tests the rest exactly
-            reach = pool.agent_radius[humans] + max(pool.agent_radius[r], self._robot_contacts.robot_radius) + _DEVICE_REACH
-            near |= np.hypot(pool.pos[humans, 0] - pool.pos[r, 0], pool.pos[humans, 1] - pool.pos[r, 1]) <= reach
-        t = header.stamp.sec + header.stamp.nanosec * 1e-9
-        edges = self._robot_contacts.step(t, [_disk(pool, r) for r in robots], [_disk(pool, r) for r in humans[near]], devices)
-        if edges:
-            self._robot_contacts_pub.publish(RobotContactsMsg(header=header, contacts=[self._contact_msg(e) for e in edges]))
-        return devices
-
-    def _contact_msg(self, edge: ContactEdge) -> RobotContactMsg:
-        key = (edge.robot.agent_id, edge.agent.agent_id)
-        if edge.event == START and key not in self._contact_labels:
-            names = {aid: name for name, aid in self._agent_name_to_id.items()}
-            agent = self._agents.get(edge.agent.agent_id)
-            self._contact_labels[key] = (names.get(edge.robot.agent_id, ""), names.get(edge.agent.agent_id, ""), agent.params.name if agent is not None else "")
-        robot_name, agent_name, agent_type = self._contact_labels[key]
-        if edge.event != START and not any(k[:2] == key for k in self._robot_contacts.active):
-            del self._contact_labels[key]
-        if edge.event == START:
-            self._logger.info(f"robot contact: {robot_name or edge.robot.agent_id} touches the {edge.part} of {agent_name or edge.agent.agent_id} ({agent_type}) at ({edge.point[0]:.2f}, {edge.point[1]:.2f})")
-        msg = RobotContactMsg(
-            event=edge.event,
-            part=edge.part,
-            robot_id=edge.robot.agent_id,
-            robot_name=robot_name,
-            agent_id=edge.agent.agent_id,
-            agent_name=agent_name,
-            agent_type=agent_type,
-            depth=float(edge.depth),
-            duration=float(edge.duration),
-            robot_pose=Pose2DMsg(x=edge.robot.x, y=edge.robot.y, theta=edge.robot.theta),
-            agent_pose=Pose2DMsg(x=edge.agent.x, y=edge.agent.y, theta=edge.agent.theta),
-        )
-        msg.point.x, msg.point.y, msg.point.z = (float(v) for v in edge.point)
-        if edge.device is not None:
-            msg.device = _device_msg(edge.device)
-        return msg
 
     def _apply_arrival_latch(self, pool: AgentPool) -> None:
         arrival_latch_step(
@@ -2896,11 +2816,10 @@ class AgentManager(Node):
         return msg
 
     def _on_contact_params(self, params: list[Parameter]) -> SetParametersResult:
-        """Validate and apply contact_mode / locomotion_standing_distance / gesture_mode / robot_contact.*, other params pass through."""
+        """Validate and apply contact_mode / locomotion_standing_distance / gesture_mode, other params pass through."""
         mode = self._interaction_manager.contact_mode
         distance: float | None = None
         gesture_mode = self._gesture_mode
-        robot_contact: dict[str, float] = {}
         for p in params:
             if p.name == "contact_mode":
                 mode = str(p.value)
@@ -2910,10 +2829,6 @@ class AgentManager(Node):
                 distance = float(p.value)
             elif p.name == "gesture_mode":
                 gesture_mode = str(p.value)
-            elif p.name in ("robot_contact.robot_radius", "robot_contact.robot_height"):
-                if not isinstance(p.value, (int, float)) or p.value < 0.0:
-                    return SetParametersResult(successful=False, reason=f"{p.name} must be a number >= 0, got {p.value!r}")
-                robot_contact[p.name] = float(p.value)
         try:
             check_gesture_mode(gesture_mode)
             self._interaction_manager.set_contact_mode(mode, distance)
@@ -2922,10 +2837,6 @@ class AgentManager(Node):
         if gesture_mode != self._gesture_mode:
             self._gesture_mode = gesture_mode
             self._gestures_dirty = True
-        if "robot_contact.robot_radius" in robot_contact:
-            self._robot_contacts.robot_radius = robot_contact["robot_contact.robot_radius"]
-        if "robot_contact.robot_height" in robot_contact:
-            self._robot_contacts.robot_height = robot_contact["robot_contact.robot_height"]
         return SetParametersResult(successful=True)
 
     def _spawn_agents_callback(
@@ -3104,8 +3015,6 @@ class AgentManager(Node):
         self._spawn_scheduler.clear_sources()
         self._despawn_monitor.clear_sinks()
         self._interaction_manager.reset()
-        self._robot_contacts.reset()
-        self._contact_labels.clear()
         self._event_bus.clear()
         self._pending_stimuli.clear()
         self._stimulus_levels.clear()

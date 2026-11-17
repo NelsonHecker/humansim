@@ -56,8 +56,6 @@ SUBSYSTEM_OVERRUN_POLICY = Param[str]("subsystem_overrun_policy", "lag", "Tick o
 CONTACT_MODE = Param[str]("contact_mode", CONTACT_ENABLED, "How contact interactions play out.", constraint=Choices(*CONTACT_MODES))
 LOCOMOTION_STANDING_DISTANCE = Param[float]("locomotion_standing_distance", DEFAULT_STANDING_DISTANCE, "Standing distance in meters of a locomotion-only contact pair.")
 GESTURE_MODE = Param[str]("gesture_mode", GESTURE_ENABLED, "Whether agents play gestures.", constraint=Choices(*GESTURE_MODES))
-ROBOT_CONTACT_RADIUS = Param[float]("robot_contact.robot_radius", 0.0, "Robot disk radius in meters for robot contacts with bodies and held devices, 0 = each robot's own radius.", constraint=Range(0.0, 10.0))
-ROBOT_CONTACT_HEIGHT = Param[float]("robot_contact.robot_height", 0.0, "Robot height in meters: a held cane touches the robot only below it, 0 = at every height.", constraint=Range(0.0, 10.0))
 
 AGENT_MANAGER_PARAMS = (
     SEED,
@@ -101,6 +99,4 @@ AGENT_MANAGER_PARAMS = (
     CONTACT_MODE,
     LOCOMOTION_STANDING_DISTANCE,
     GESTURE_MODE,
-    ROBOT_CONTACT_RADIUS,
-    ROBOT_CONTACT_HEIGHT,
 )
