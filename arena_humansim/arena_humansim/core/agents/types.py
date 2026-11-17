@@ -201,10 +201,11 @@ class AwarenessDraw:
 
 
 def sample_awareness(spec: AwarenessSpec, rng: np.random.Generator) -> AwarenessDraw:
-    shift = spec
     if isinstance(spec, AwarenessMixture):
         weights = np.array([weight for weight, _ in spec.components], dtype=np.float64)
         shift = spec.components[int(rng.choice(len(spec.components), p=weights / weights.sum()))][1]
+    else:
+        shift = spec
     return AwarenessDraw(
         detection=_sample_dist(shift.detection, rng),
         fov=_sample_dist(shift.fov, rng),
