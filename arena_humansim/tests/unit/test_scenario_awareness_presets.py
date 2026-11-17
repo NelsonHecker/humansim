@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pytest
 from arena_humansim.core.agents.loader import load_agent_type_from_file
-from arena_humansim.core.agents.types import AWARENESS_PRESETS, AwarenessMixture, as_awareness_spec, awareness_from_text
+from arena_humansim.core.agents.types import AWARENESS_PRESETS, AwarenessMixture, as_awareness_spec, awareness_from_text, sample_agent_type
 from arena_humansim.utils.scenario import _structure_manual
 
 CONFIG_DIR = Path(__file__).resolve().parents[2] / "config" / "agent_types"
@@ -122,3 +123,11 @@ def test_awareness_text_that_is_broken_json_is_rejected() -> None:
 def test_awareness_text_with_an_unknown_preset_is_rejected() -> None:
     with pytest.raises(ValueError, match="unknown robot awareness preset 'sleepy'"):
         awareness_from_text("sleepy")
+
+
+def test_robot_type_samples_fixed_sensor_and_planner_values() -> None:
+    params = sample_agent_type(load_agent_type_from_file(CONFIG_DIR / "robot.yaml"), np.random.default_rng(7))
+    perception = params.perception
+    assert (perception.vision_range_sd, perception.vision_fov_sd, perception.repulsion_rel_sd, perception.reaction_rel_sd) == (0.0, 0.0, 0.0, 0.0)
+    assert params.local_planner_params["repulsion_strength"] == 2.1
+    assert params.local_planner_params["repulsion_range"] == 0.3
