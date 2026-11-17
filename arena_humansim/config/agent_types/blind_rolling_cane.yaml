@@ -29,15 +29,4 @@ pose:
   walk: {base: walk_rollingcane}
   run: {same_as: walk}
 
-# Device: the long cane in the right fist (1.27 m, held 0.1 m below its top), fitted by Arena from profile walk_rollingcane
-# posed on Common/Human/casual_male_asian_young_rollingcane (python3 -m arena_simulation_setup.adapters.arena_animation_retarget.devices, within 8 mm): tip ahead 0.93-1.05 m rolling
-# +-0.30 m across the path on the floor.
-device:
-  kind: cane
-  model: Common/Object/RollingCane
-  grip: {x: 0.3, y: -0.1, z: 0.9}
-  tip:
-    x: {mean: 1.009, harmonics: [[0.0432, -0.3488], [0.0322, 0.8747]]}
-    y: {mean: -0.0002, harmonics: [[0.2998, 2.7925]]}
-    z: 0.0001
-  radius: 0.0125
+device: {kind: cane, bone: cane}

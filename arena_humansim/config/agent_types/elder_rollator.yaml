@@ -29,11 +29,4 @@ pose:
   walk: {base: walk_rollator}
   run: {same_as: walk}
 
-# Device: the rollator under both grips, fitted by Arena from profile walk_rollator posed on
-# Common/Human/casual_male_caucasian_old_rollator (python3 -m arena_simulation_setup.adapters.arena_animation_retarget.devices, within 2 mm): the footprint of Common/Object/RollatorFitted
-# (0.69 x 0.57 m, 0.88 m high), its origin under the grips' middle 0.36 m ahead.
-device:
-  kind: rollator
-  model: Common/Object/RollatorFitted
-  origin: {x: 0.36, y: 0.0, z: 0.0}
-  size: {length: 0.6887, width: 0.5708, height: 0.8794, ahead: 0.0008, left: 0.0}
+device: {kind: rollator, bone: prop}
