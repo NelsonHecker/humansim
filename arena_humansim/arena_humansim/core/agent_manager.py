@@ -55,6 +55,7 @@ from arena_humansim_msgs.srv import (
     UpdateRobot,
 )
 from arena_rclpy_mixins.params import Param, declare
+from arena_rclpy_mixins.Time import TimeNode
 from geometry_msgs.msg import Point32, Vector3
 from geometry_msgs.msg import Pose2D as Pose2DMsg
 from py_trees.common import Status
@@ -62,7 +63,6 @@ from py_trees.trees import BehaviourTree
 from rcl_interfaces.msg import SetParametersResult
 from rclpy.clock import Clock as RclClock
 from rclpy.clock import ClockType
-from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from rosgraph_msgs.msg import Clock
@@ -336,7 +336,7 @@ def _gesture_msg(intent: GestureIntent) -> GestureMsg:
     return g
 
 
-class AgentManager(Node):
+class AgentManager(TimeNode):
     def __init__(self, **node_kwargs: Any) -> None:
         super().__init__("arena_humansim", **node_kwargs)
         self._logger = self.get_logger()
@@ -3188,7 +3188,7 @@ class AgentManager(Node):
     def _publish_world_geometry(self) -> None:
         msg = WorldGeometryMsg()
         msg.header.frame_id = "map"
-        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.stamp = self._header().stamp
 
         for name, ((sx, sy), (ex, ey)) in self._walls.items():
             msg.wall_names.append(name)  # pyright: ignore[reportAttributeAccessIssue]
