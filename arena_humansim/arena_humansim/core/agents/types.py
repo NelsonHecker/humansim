@@ -227,6 +227,12 @@ def _as_reaction_dist(val: object) -> "ParamDist | None":
     return None
 
 
+def _as_effort_dist(val: "ParamDist | float | Mapping[str, float]") -> "ParamDist":
+    if isinstance(val, dict):
+        return ParamDist(**{"clip_low": 1.0, "clip_high": 3.0, **val})
+    return _as_paramdist(val)
+
+
 @attrs.frozen
 class NeedDist:
     initial: ParamDist = attrs.field(default=ParamDist(100.0), converter=_as_paramdist)
@@ -544,7 +550,7 @@ class AgentType:
     assets: tuple[str, ...] = ()
     climbs: tuple[str, ...] = attrs.field(default=STAIRS_KINDS, converter=tuple, validator=attrs.validators.deep_iterable(attrs.validators.in_(STAIRS_KINDS)))
     # How many times its walking time a climb on still stairs feels like, against riding a running belt.
-    stair_effort: ParamDist = attrs.field(default=ParamDist(1.6, 0.5, clip_low=1.0, clip_high=3.0), converter=_as_paramdist)
+    stair_effort: ParamDist = attrs.field(default=ParamDist(1.6, 0.5, clip_low=1.0, clip_high=3.0), converter=_as_effort_dist)
 
     perception_stack: tuple[str, ...] = ("default",)
     local_planner: str | None = None
