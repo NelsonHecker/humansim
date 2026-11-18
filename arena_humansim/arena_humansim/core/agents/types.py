@@ -131,11 +131,11 @@ _SHIFT_FIELDS: tuple[str, ...] = ("detection", "fov", "repulsion", "reaction", "
 
 AWARENESS_PRESETS: dict[str, AwarenessShift] = {
     "blind": AwarenessShift(blind=True),
-    "distracted": AwarenessShift(detection=-2.0, fov=-1.0, repulsion=-1.0, reaction=-1.0),
+    "distracted": AwarenessShift(detection=-5.0, fov=-8.0, repulsion=-3.0, reaction=-3.0),
     "normal": AwarenessShift(),
-    "interested": AwarenessShift(repulsion=-1.0),
-    "aggressive": AwarenessShift(fov=-1.0, repulsion=-2.0, reaction=1.0),
-    "scared": AwarenessShift(fov=1.0, repulsion=2.0),
+    "interested": AwarenessShift(repulsion=-3.0, reaction=-1.5),
+    "aggressive": AwarenessShift(fov=-1.0, repulsion=-4.0, reaction=-2.0),
+    "scared": AwarenessShift(fov=2.0, repulsion=6.0, reaction=3.0),
 }
 
 

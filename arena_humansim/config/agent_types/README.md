@@ -36,12 +36,12 @@ Built-in presets for robot awareness: `blind`, `distracted`, `normal`, `interest
 | Parameter | SFM / HSFM | ORCA | Meaning |
 |---|---|---|---|
 | `robot_awareness` `detection` | robot detection range, pruned in perception | distance cutoff when below `vision_range` | how far the agent sees robots |
-| `robot_awareness` `repulsion` | gain on repulsion strength A against robots | gain on the robot clearance radius | yielding urgency and clearance |
+| `robot_awareness` `repulsion` | gain on repulsion strength A against robots | gain on the robot clearance radius, floored at 0.85 | yielding urgency and clearance |
 | `robot_awareness` `fov` | robot cone, pruned in perception | ignored | asymmetric field of view against robots |
-| `robot_awareness` `reaction` | gain on repulsion range B against robots | ignored | how early the agent starts avoiding robots |
+| `robot_awareness` `reaction` | gain on repulsion range B against robots | gain on velocity obstacle time horizon against robots | how early the agent starts avoiding robots |
 | `robot_awareness` `blind` | no robot perception | no robot perception | robots are invisible to the agent |
 
-> Note: ORCA builds its private neighbor list and solves instantaneous geometric velocity obstacles, so it reads `detection`, `blind` and `repulsion`; `fov` and `reaction` act only through the force planners.
+> Note: ORCA builds its private neighbor list and solves instantaneous geometric velocity obstacles, so it reads `detection`, `blind`, `repulsion` and `reaction`; `fov` acts only through the perception-gated planners.
 
 Local planner (`local_planner_params:`):
 
@@ -336,12 +336,12 @@ For a `dynamic:` scenario entry, `ArenaHumanDynamicObstacle.sample_params` (in [
 - `elder` - slower, narrower FOV, longer SFM relaxation. Demonstrates how heterogeneity drops out of a handful of distribution tweaks.
 - `child` - small body (0.18 m), wide speed spread (0.4-1.8 m/s), 3 m vision, weaker SFM repulsion.
 - `hurried` - fast (desired 1.7 m/s), narrower FOV, shorter SFM relaxation and repulsion range.
-- `distracted` - phone-walker: 2 m vision, 90 degree FOV, longer SFM relaxation. Robot shifts: `detection` -2, `fov` -1, `repulsion` -1, `reaction` -1.
+- `distracted` - phone-walker: 2 m vision, 90 degree FOV, longer SFM relaxation. Robot shifts: `detection` -5, `fov` -8, `repulsion` -3, `reaction` -3. On an adult (180 degree FOV, std 10) the `fov` shift gives 100 degrees. The shipped `distracted.yaml` type already starts at 90 degrees, so it takes no `fov` shift, which would count the narrowing twice. It uses `detection` -0.75, `repulsion` -3 and `reaction` -3 instead.
 - `blind` - pedestrian oblivious to robots (`robot_awareness: blind`). Human-human social navigation remains 100% active.
 - `normal` - standard adult pedestrian with no robot shift (`robot_awareness: normal`).
-- `interested` - curious pedestrian watching or approaching the robot. Robot shift: `repulsion` -1.
-- `aggressive` - assertive pedestrian who cuts across. Robot shifts: `fov` -1, `repulsion` -2, `reaction` +1.
-- `scared` - cautious pedestrian who keeps a wide clearance from robots. Robot shifts: `fov` +1, `repulsion` +2.
+- `interested` - curious pedestrian watching or approaching the robot. Robot shifts: `repulsion` -3, `reaction` -1.5.
+- `aggressive` - assertive pedestrian who cuts across. Robot shifts: `fov` -1, `repulsion` -4, `reaction` -2.
+- `scared` - cautious pedestrian who keeps a wide clearance from robots. Robot shifts: `fov` +2, `repulsion` +6, `reaction` +3.
 - `sidewalk_obstructing`, `sidewalk_conversing`, `sidewalk_queueing`, `sidewalk_frontal`, `sidewalk_lateral`, `sidewalk_overtaking`, `sidewalk_crossing`, `sidewalk_gesturing` - the eight SidewalkBench pedestrian behaviors, each `extends: adult` in `behavior_tree` mode. A type idles in sequence `idle` on a robot step until its trigger holds, runs the behavior, then parks in `done`.
 
 | Type | Trigger | Behavior |
