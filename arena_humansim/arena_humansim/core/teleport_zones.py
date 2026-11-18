@@ -18,7 +18,7 @@ SLOT_SPACING = 0.7
 SLOT_MARGIN = 0.35
 STAIR_SPEED = 0.7
 LANDING_BACKOFF = 0.1
-LANE_MARGIN = 0.5  # meters the point a stair half's seam is walked to keeps off the half's side
+LANE_MARGIN = 0.5
 
 
 def _inside(pts: tuple[tuple[float, float], ...], x: float, y: float) -> bool:
@@ -334,7 +334,6 @@ class TeleportZones:
                 continue
             moves[i] = (lx, ly, theta)
             landed.append((lx, ly, r))
-        # two that wait for each other's spot would hold both sides of the stair for good
         for i, others in blocked.items():
             zone, dest = crossing[i][:2]
             for j in others:
