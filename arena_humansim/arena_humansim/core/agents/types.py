@@ -549,7 +549,7 @@ class AgentType:
     interaction_class: str = ""
     assets: tuple[str, ...] = ()
     climbs: tuple[str, ...] = attrs.field(default=STAIRS_KINDS, converter=tuple, validator=attrs.validators.deep_iterable(attrs.validators.in_(STAIRS_KINDS)))
-    # How many times its walking time a climb on still stairs feels like, against riding a running belt.
+    # multiplier on the walking time of a climb on still stairs
     stair_effort: ParamDist = attrs.field(default=ParamDist(1.6, 0.5, clip_low=1.0, clip_high=3.0), converter=_as_effort_dist)
 
     perception_stack: tuple[str, ...] = ("default",)
@@ -727,7 +727,7 @@ def sample_agent_type(
     idle_gaze_rate_hz = _sample_dist(agent_type.idle_gaze_rate, rng)
     handedness = _sample_handedness(agent_type.handedness, rng)
     locomotion = _sample_locomotion(agent_type, rng)
-    # drawn last, so adding it left every earlier draw of the agent's stream as it was
+    # drawn last so the draws before it stay the same for a seed
     stair_effort = _sample_dist(agent_type.stair_effort, rng)
 
     return SampledParams(

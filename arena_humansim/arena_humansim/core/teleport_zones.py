@@ -257,7 +257,6 @@ class TeleportZones:
                         transfer = None
                     else:
                         transfer.aboard = on
-                # a ride is given up when its half shuts, or when the crowd pushed the pedestrian to where no walk leads to it
                 if transfer is not None and transfer.ride and not self._aboard(transfer, *near) and (transfer.zone in blocked[climbs] or (comps[k] and not comps[k] & graph.sides[transfer.zone])):
                     del self.transfers[aid]
                     transfer = None
@@ -274,19 +273,16 @@ class TeleportZones:
                     ride = False
                     walkable = bool({graph.area.get(c, c) for c in start} & {graph.area.get(c, c) for c in end})
                     if (edge is None and walkable) or (edge is not None and edge[0] in self._joined):
-                        # fewest teleports cannot tell the two ways out of a floor that stairs on its own level join, time can
                         timed = self._ride(planner, agent, cmd.target_pose, goal, blocked[climbs] | set(self._banned[aid][1] if aid in self._banned else ()))
                         if timed is not None:
                             edge, ride = timed, True
                     if edge is None:
                         self.transfers.pop(aid, None)
-                        # a plan to the point nearest a goal beyond a stair it does not climb would end on that stair
                         plan = plans.get(aid)
                         if plan and any(self.zones[name].kind not in climbs and self.zones[name].contains(plan[-1].x, plan[-1].y) and not self.zones[name].contains(*goal) for name in self._joined):
                             self.through[aid] = agent.state.pose
                         continue
                     if transfer is None or (transfer.zone, transfer.destination) != edge:
-                        # the side the pedestrian comes from, taken once: a target that followed it would be planned anew every tick
                         transfer = self.transfers[aid] = Transfer(goal=goal, zone=edge[0], destination=edge[1], ride=ride, side=self.zones[edge[0]].across(*near))
                 z = self.zones[transfer.zone]
                 if z.kind:
@@ -318,7 +314,6 @@ class TeleportZones:
             speed = max(agent.params.desired_velocity, 0.1)
             walk = _walk_time(planner.paths([(near, target)])[0], speed)
             ride = [self._ride_time(name, dest, speed, agent.params.stair_effort) for name, dest in rides]
-            # no walk is shorter than its straight line, so a ride that cannot lie on a quicker way even over those is left out before any path is planned
             reach = [math.hypot(self.zones[name].entry.x - near.x, self.zones[name].entry.y - near.y) / speed for name, _ in rides]
             rest = [math.hypot(target.x - self.zones[dest].entry.x, target.y - self.zones[dest].entry.y) / speed for _, dest in rides]
             first, last = min(map(operator.add, reach, ride)), min(map(operator.add, ride, rest))
@@ -329,7 +324,6 @@ class TeleportZones:
             lands = [self.zones[dest].entry for _, dest in rides]
             walks = [_walk_time(path, speed) for path in planner.paths([*((near, mouth) for mouth in mouths), *((land, target) for land in lands)])]
             board, rest = walks[: len(rides)], walks[len(rides) :]
-            # a landing that cannot walk on to the goal, as between two flights, carries on over the stairs it can walk to
             comps = planner.components(lands + mouths)
             legs = [(i, j) for i in range(len(rides)) if math.isinf(rest[i]) for j in range(len(rides)) if comps[i] & comps[len(rides) + j]]
             onward = dict(zip(legs, (_walk_time(path, speed) for path in planner.paths([(lands[i], mouths[j]) for i, j in legs])), strict=True))
