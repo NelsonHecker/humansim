@@ -3,9 +3,9 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING
 
+from arena_rclpy_mixins.Time import TimeNode
 from builtin_interfaces.msg import Time
 from geometry_msgs.msg import Point
-from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import ColorRGBA
 from visualization_msgs.msg import Marker, MarkerArray
@@ -158,7 +158,7 @@ class MarkerView:
 
 
 class MarkerPublisher:
-    def __init__(self, node: Node):
+    def __init__(self, node: TimeNode):
         self._node = node
         self._pub = node.create_publisher(MarkerArray, "viz", 100)
         static_qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.TRANSIENT_LOCAL)
@@ -183,7 +183,7 @@ class MarkerPublisher:
         return False
 
     def _stamp(self) -> Time:
-        return self._node.get_clock().now().to_msg()
+        return self._node.sim_time.to_msg()
 
     def view(self, ns: str, mtype: int, count: int = 0, dirty: bool = True) -> MarkerView:
         self._touched_ns.add(ns)

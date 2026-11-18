@@ -33,11 +33,11 @@ def _no_neighbors(pool: AgentPool) -> None:
 def marker_publisher(rclpy_context: object) -> Iterator[object]:
     if rclpy_context is None:
         pytest.skip("rclpy unavailable")
-    from rclpy.node import Node
+    from arena_rclpy_mixins.Time import TimeNode
 
     from arena_humansim.core.viz import MarkerPublisher
 
-    node = Node("force_planner_markers_test")
+    node = TimeNode("force_planner_markers_test")
     try:
         yield MarkerPublisher(node)
     finally:

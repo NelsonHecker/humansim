@@ -21,23 +21,27 @@ Perception (`perception:`):
 - `vision_fov` (degrees, full angle - 360 = omnidirectional)
 - `proximity_sense` (m) - near-field detection radius independent of FOV.
 - `vision_occlusion` (bool, not a distribution) - whether walls block line of sight.
-- `robot_awareness` (float [0.0, 1.0] or preset name) - perception gate against robots. `0.0` blinds the human to robots while human-human social navigation remains 100% active.
-- `robot_repulsion_gain` (float >= 0.0 or preset name) - planner-dependent avoidance gain against robots. In SFM, scales repulsive force magnitude A; in ORCA, scales perceived obstacle radius.
-- `robot_fov_gain` (float >= 0.0 or preset name) - asymmetric field-of-view multiplier for robot detection (e.g. 0.3 for tunnel vision, 1.2 for hyper-vigilant scanning). Pruned upstream in perception.
-- `robot_reaction_gain` (float >= 0.05 or preset name) - in SFM, scales interaction range B (early anticipation vs sluggish reaction).
+- `robot_awareness` - how this agent perceives robots. Accepts a preset name, `blind`, a boolean (`true` is `normal`, `false` is `blind`), a mapping of shifts, or a list of weighted entries for a crowd mixture. Mapping keys are `detection`, `fov`, `repulsion` and `reaction`; each value is a number of sigmas or a `{mean, std, clip_low, clip_high}` distribution of sigmas, and omitted keys stay at 0. A sigma is the agent's own spread of that dimension, so `detection: -2` moves the robot range by two times the `vision_range` std.
+  - `detection`: robot detection range, from `vision_range`; never past the agent's own range.
+  - `fov`: robot field of view, from `vision_fov`, clipped to 0-360 degrees.
+  - `repulsion`: gain on the SFM repulsion strength A against robots, `1 + sigmas x (std / mean)` of `repulsion_strength` (the SFM default when the planner declares none), floored at 0. ORCA scales its robot clearance by the same gain.
+  - `reaction`: gain on the SFM repulsion range B against robots, `1 + sigmas x (std / mean)` of `repulsion_range` (same fallback), floored at 0.05. A larger B starts avoiding robots earlier.
+  - `blind: true` removes robots from perception entirely.
+  - The former scalar keys (a numeric `robot_awareness`, `robot_repulsion_gain`, `robot_fov_gain` and `robot_reaction_gain`) are removed; the shifts above replace them.
 
-Built-in presets for robot awareness: `blind`, `distracted`, `normal`, `interested`, `aggressive`, `scared`.
+Built-in presets for robot awareness: `blind`, `distracted`, `normal`, `interested`, `aggressive`, `scared`. Their shifts are listed under the archetypes below.
 
 ### Per-planner robot interaction capability matrix
 
 | Parameter | SFM / HSFM | ORCA | Meaning |
 |---|---|---|---|
-| `robot_awareness` | filtered in perception CSR | distance cutoff when < 1.0 | visibility gate: 0.0 removes robot from perception |
-| `robot_repulsion_gain` | force magnitude (A) | perceived obstacle radius | yielding urgency and clearance scale |
-| `robot_fov_gain` | filtered in perception CSR | ignored | asymmetric FOV cone against robots |
-| `robot_reaction_gain` | interaction range (B) | ignored | reaction distance and anticipation envelope |
+| `robot_awareness` `detection` | robot detection range, pruned in perception | distance cutoff when below `vision_range` | how far the agent sees robots |
+| `robot_awareness` `repulsion` | gain on repulsion strength A against robots | gain on the robot clearance radius, floored at 0.85 | yielding urgency and clearance |
+| `robot_awareness` `fov` | robot cone, pruned in perception | ignored | asymmetric field of view against robots |
+| `robot_awareness` `reaction` | gain on repulsion range B against robots | gain on velocity obstacle time horizon against robots | how early the agent starts avoiding robots |
+| `robot_awareness` `blind` | no robot perception | no robot perception | robots are invisible to the agent |
 
-> Note: ORCA builds its private neighbor list and solves instantaneous geometric velocity obstacles; hence it consumes `robot_awareness` (to prune distant robots when $< 1.0$) and `robot_repulsion_gain` (to size non-reciprocating obstacle clearance), while `robot_fov_gain` and `robot_reaction_gain` are specific to force-based planners (`sfm`, `hsfm`).
+> Note: ORCA builds its private neighbor list and solves instantaneous geometric velocity obstacles, so it reads `detection`, `blind`, `repulsion` and `reaction`; `fov` acts only through the perception-gated planners.
 
 Local planner (`local_planner_params:`):
 
@@ -334,12 +338,12 @@ For a `dynamic:` scenario entry, `ArenaHumanDynamicObstacle.sample_params` (in [
 - `elder` - slower, narrower FOV, longer SFM relaxation. Demonstrates how heterogeneity drops out of a handful of distribution tweaks.
 - `child` - small body (0.18 m), wide speed spread (0.4-1.8 m/s), 3 m vision, weaker SFM repulsion.
 - `hurried` - fast (desired 1.7 m/s), narrower FOV, shorter SFM relaxation and repulsion range.
-- `distracted` - phone-walker: 2 m vision, 90deg FOV, longer SFM relaxation, reduced robot awareness (0.3), repulsion (0.6), FOV (0.3), and reaction range (0.5).
-- `blind` - pedestrian oblivious to robots (`robot_awareness: 0.0`, `robot_repulsion_gain: 0.0`, `robot_fov_gain: 0.0`). Human-human social navigation remains 100% active.
-- `normal` - standard adult pedestrian with nominal awareness and clearance against robots (`1.0, 1.0, 1.0, 1.0`).
-- `interested` - curious pedestrian watching or approaching the robot (`robot_awareness: 1.0`, `robot_repulsion_gain: 0.6`).
-- `aggressive` - assertive pedestrian with reduced robot avoidance clearance and assertive cutting across (`robot_repulsion_gain: 0.4`, `robot_fov_gain: 0.8`, `robot_reaction_gain: 1.2`).
-- `scared` - cautious pedestrian yielding early with wide clearance (`robot_repulsion_gain: 2.0`, `robot_fov_gain: 1.2`, `robot_reaction_gain: 0.7`).
+- `distracted` - phone-walker: 2 m vision, 90 degree FOV, longer SFM relaxation. Robot shifts: `detection` -5, `fov` -8, `repulsion` -3, `reaction` -3. On an adult (180 degree FOV, std 10) the `fov` shift gives 100 degrees. The shipped `distracted.yaml` type already starts at 90 degrees, so it takes no `fov` shift, which would count the narrowing twice. It uses `detection` -0.75, `repulsion` -3 and `reaction` -3 instead.
+- `blind` - pedestrian oblivious to robots (`robot_awareness: blind`). Human-human social navigation remains 100% active.
+- `normal` - standard adult pedestrian with no robot shift (`robot_awareness: normal`).
+- `interested` - curious pedestrian watching or approaching the robot. Robot shifts: `repulsion` -3, `reaction` -1.5.
+- `aggressive` - assertive pedestrian who cuts across. Robot shifts: `fov` -1, `repulsion` -4, `reaction` -2.
+- `scared` - cautious pedestrian who keeps a wide clearance from robots. Robot shifts: `fov` +2, `repulsion` +6, `reaction` +3.
 - `sidewalk_obstructing`, `sidewalk_conversing`, `sidewalk_queueing`, `sidewalk_frontal`, `sidewalk_lateral`, `sidewalk_overtaking`, `sidewalk_crossing`, `sidewalk_gesturing` - the eight SidewalkBench pedestrian behaviors, each `extends: adult` in `behavior_tree` mode. A type idles in sequence `idle` on a robot step until its trigger holds, runs the behavior, then parks in `done`.
 
 | Type | Trigger | Behavior |
