@@ -558,7 +558,7 @@ class AgentType:
     tunes: tuple[ConditionalTune, ...] = ()
     vars: dict[str, VarDef] = attrs.Factory(dict)
     extends: str | None = None
-    device: dict = attrs.Factory(dict)  # held assistive device, passed through to the renderer like `pose`
+    device: dict = attrs.Factory(dict)
 
     source_path: Path | None = attrs.field(default=None, eq=False, hash=False, repr=False)
 
