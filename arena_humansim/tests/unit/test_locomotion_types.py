@@ -206,7 +206,7 @@ def test_shipped_device_blocks_pass_through(name: str, kind: str) -> None:
 
 
 def test_a_device_block_is_inherited_whole_and_defaults_to_none() -> None:
-    device = {"kind": "cane", "grip": {"x": 0.3, "y": -0.1, "z": 0.9}, "tip": {"x": 1.0, "y": 0.0, "z": 0.0}, "radius": 0.0125}
+    device = {"kind": "cane", "bone": "cane"}
     merged = resolve_extends({"child": {"name": "child", "extends": "parent", "perception": {"robot_awareness": 0.0}}}, {"parent": {"name": "parent", "device": device}})
     assert merged["child"]["device"] == device
     assert AgentType(name="plain").device == {}
