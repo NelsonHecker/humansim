@@ -308,7 +308,7 @@ class TeleportZones:
         key = (goal, frozenset(blocked))
         if self._walks.get(aid) == key:
             return None
-        rides = [(name, dest) for name, zone in sorted(self.zones.items()) if zone.kind and name not in blocked for dest in zone.destinations if dest in self.zones]
+        rides = [(name, dest) for name, zone in sorted(self.zones.items()) if name in self._joined and name not in blocked for dest in zone.destinations if dest in self.zones]
         if rides:
             near = agent.state.pose
             speed = max(agent.params.desired_velocity, 0.1)
