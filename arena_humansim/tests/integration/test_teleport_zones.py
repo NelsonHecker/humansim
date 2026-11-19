@@ -822,3 +822,32 @@ def test_manual_wheelchair_never_stands_on_a_stair_on_its_own_floor_and_takes_th
         rode = rode or (2 in mgr._zones.transfers and mgr._zones.transfers[2].zone == "fl_b")
     assert rode or way_round
     assert (float(pool.pos[pool.idx(1), 0]) > SEAM_X) == way_round
+
+
+def _two_way(riders: int) -> ScenarioConfig:
+    """Riders released in each room with their sink in the other one."""
+    scenario = _scenario("stairs_two_way", "navmesh", riders)
+    [source], [sink] = scenario.flow.sources, scenario.flow.sinks
+    back = attrs.evolve(source, pose=Pose2D(x=ROOM_B_X + 5.0, y=3.0), agent_template=attrs.evolve(source.agent_template, sink_affinity=[SinkAffinityModel(sink_idx=1, weight=1.0)]))
+    flow = attrs.evolve(scenario.flow, sources=[source, back], sinks=[sink, attrs.evolve(sink, pose=Pose2D(x=1.0, y=1.0))])
+    return attrs.evolve(scenario, walls=scenario.walls + STAIRS_WALLS, flow=flow)
+
+
+def test_two_way_traffic_over_one_stair_gets_everyone_across_once(manager_factory: Callable[..., AgentManager]) -> None:
+    riders = 8
+    mgr = manager_factory(_two_way(riders), node_name="test_stairs_two_way")
+    assert _set_zones(mgr, [_stair_half("st_a", "st_b", "stairs", 0.0, b_side=False), _stair_half("st_b", "st_a", "stairs", 0.0, b_side=True)]).success
+    pool = mgr._pool
+    last: dict[int, float] = {}
+    crossings: dict[int, int] = {}
+
+    def everyone_arrived() -> bool:
+        for i in range(pool.n):
+            aid, x = int(pool.agent_ids[i]), float(pool.pos[i, 0])
+            if abs(x - last.setdefault(aid, x)) > 5.0:
+                crossings[aid] = crossings.get(aid, 0) + 1
+            last[aid] = x
+        return len(last) == 2 * riders and not mgr._agents
+
+    _tick_until(mgr, everyone_arrived, 4000)
+    assert crossings == dict.fromkeys(last, 1)

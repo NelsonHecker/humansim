@@ -104,8 +104,8 @@ def test_route_takes_the_stair_whose_entry_is_nearest_among_equal_teleport_count
     out = tz.steer([top, bottom], _go([top, bottom], GOAL_B))
     assert (tz.transfers[1].zone, tz.transfers[1].destination) == ("up", "up_b")
     assert (tz.transfers[2].zone, tz.transfers[2].destination) == ("low", "low_b")
-    assert out[1].target_pose == tz.zones["up"].hold
-    assert out[2].target_pose == tz.zones["low"].hold
+    assert out[1].target_pose == tz.zones["up"].lane
+    assert out[2].target_pose == tz.zones["low"].lane
 
 
 def test_route_keeps_its_stair_while_another_becomes_nearer(agent_factory: Callable[..., BaseAgent], planner: DijkstraPlanner) -> None:
@@ -150,7 +150,7 @@ def test_closed_boarding_half_is_skipped_but_a_pedestrian_on_it_carries_on(agent
     out = tz.steer([outside, aboard], _go([outside, aboard], GOAL_B))
     assert tz.transfers[1].zone == "low"
     assert tz.transfers[2].zone == "up"
-    assert out[2].target_pose == tz.zones["up"].hold
+    assert out[2].target_pose == tz.zones["up"].lane
 
 
 def test_exit_only_half_is_never_routed_into(agent_factory: Callable[..., BaseAgent], planner: DijkstraPlanner) -> None:
@@ -537,3 +537,80 @@ def test_a_rider_pushed_back_over_the_seam_it_crossed_takes_that_flight_again(ag
     walker.state.pose = Pose2D(x=10.3, y=3.6)
     tz.steer([walker], cmds)
     assert (tz.transfers[1].zone, tz.transfers[1].ride) == ("lower_b", True)
+
+
+def test_a_stair_half_is_walked_to_on_the_right_of_its_hold_line_and_at_its_hold_pose_when_too_narrow() -> None:
+    tz = _zones([_up(), _up_b()])
+    assert (tz.zones["up"].lane.x, tz.zones["up"].lane.y) == pytest.approx((9.55, 4.9))
+    assert (tz.zones["up_b"].lane.x, tz.zones["up_b"].lane.y) == pytest.approx((22.5, 0.45))
+    wide = _stair("wide", (), Pose2D(x=5.0, y=4.0), Pose2D(x=9.55, y=4.0), _box(5.0, 2.0, 10.0, 6.0))
+    assert (wide.lane.x, wide.lane.y) == pytest.approx((9.55, 3.0))
+    narrow = _stair("narrow", (), Pose2D(x=5.0, y=5.2), Pose2D(x=9.55, y=5.2), _box(5.0, 4.7, 10.0, 5.7))
+    assert narrow.lane == narrow.hold
+
+
+def test_the_two_ways_over_one_stair_walk_to_and_land_on_opposite_sides(agent_factory: Callable[..., BaseAgent]) -> None:
+    tz = _zones([_up(), _up_b()])
+    up, down = tz.zones["up"].lane, tz.zones["up_b"].lane
+    pool = _pool(agent_factory, (1, up.x, up.y), (2, down.x, down.y))
+    crossed = {aid: (x, y) for aid, x, y, _ in tz.hold(pool, 0, 1000, 0.05, 0)}
+    assert crossed[1] == pytest.approx((23.1, 0.45 + LANDING_BACKOFF))
+    assert crossed[2] == pytest.approx((9.55 - LANDING_BACKOFF, 5.5))
+
+
+def test_two_walkers_crossing_one_seam_the_opposite_ways_on_each_others_landing_change_places(agent_factory: Callable[..., BaseAgent]) -> None:
+    tz = _zones([_up(), _up_b()])
+    pool = _pool(agent_factory, (1, 9.7, 5.2), (2, 22.8, 0.3))
+    pool.theta[0] = 0.1
+    crossed = {aid: (x, y, theta) for aid, x, y, theta in tz.hold(pool, 0, 1000, 0.05, 0)}
+    assert crossed[1] == pytest.approx((22.8, 0.3, HALF_PI + 0.1))
+    assert crossed[2] == pytest.approx((9.7, 5.2, -HALF_PI))
+    assert not tz._held
+
+
+def test_walkers_queued_behind_the_two_do_not_stop_them_changing_places(agent_factory: Callable[..., BaseAgent]) -> None:
+    tz = _zones([_up(), _up_b()])
+    pool = _pool(agent_factory, (1, 9.6, 5.2), (2, 22.8, 0.4), (3, 9.1, 5.2), (4, 22.8, 0.9))
+    assert sorted(aid for aid, *_ in tz.hold(pool, 0, 1000, 0.05, 0)) == [1, 2]
+
+
+def test_a_crossing_never_lands_on_a_walker_that_stays(agent_factory: Callable[..., BaseAgent]) -> None:
+    tz = _zones([_up(), _up_b()])
+    pool = _pool(agent_factory, (1, 9.7, 5.2), (2, 22.55, 0.3), (3, 9.7, 5.7), (4, 22.3, 1.0))
+    for aid, x, y, _ in tz.hold(pool, 0, 1000, 0.05, 0):
+        pool.pos[pool.idx(aid)] = (x, y)
+    assert tz._held == {3}
+    gaps = [math.hypot(*(pool.pos[i] - pool.pos[j])) for i in range(4) for j in range(i)]
+    assert min(gaps) >= 0.5 - 1e-9
+
+
+def test_a_larger_walker_changes_places_only_where_it_fits(agent_factory: Callable[..., BaseAgent]) -> None:
+    tz = _zones([_up(), _up_b()])
+    pool = _pool(agent_factory, (1, 9.7, 5.2), (2, 22.8, 0.3), (3, 22.8, 0.85))
+    pool.agent_radius[0] = 0.4
+    assert tz.hold(pool, 0, 1000, 0.05, 0) == []
+    assert tz._held == {1, 2}
+    pool.pos[2] = (22.8, 1.2)
+    assert sorted(aid for aid, *_ in tz.hold(pool, 1, 1000, 0.05, 0)) == [1, 2]
+
+
+def test_a_walker_is_not_sent_back_from_the_half_it_landed_on_before_it_has_left_it_or_is_routed_back(agent_factory: Callable[..., BaseAgent]) -> None:
+    tz = _zones([_up(), _up_b()])
+    pool = _pool(agent_factory, (1, 9.6, 5.2), (2, 9.6, 5.8))
+    [(_, x, y, _), (_, x2, y2, _)] = tz.hold(pool, 0, 1000, 0.05, 0)
+    pool.pos[0], pool.pos[1] = (x, y - 0.3), (x2, y2 - 0.3)
+    assert tz.hold(pool, 1, 1000, 0.05, 0) == []
+    assert not tz._held and tuple(pool.pos[0]) == pytest.approx((x, y - 0.3))
+    tz.transfers[2] = Transfer(goal=(GOAL_A.x, GOAL_A.y), zone="up_b", destination="up")
+    assert [aid for aid, *_ in tz.hold(pool, 2, 1000, 0.05, 0)] == [2]
+    pool.pos[0], pool.pos[1] = (22.8, 4.0), (2.0, 2.0)
+    assert tz.hold(pool, 3, 1000, 0.05, 0) == []
+    pool.pos[0] = (22.8, 0.3)
+    assert [aid for aid, *_ in tz.hold(pool, 4, 1000, 0.05, 0)] == [1]
+
+
+def test_a_walker_on_the_landing_that_crosses_nowhere_still_holds_the_crossing(agent_factory: Callable[..., BaseAgent]) -> None:
+    tz = _zones([_up(), _up_b()])
+    pool = _pool(agent_factory, (1, 9.7, 5.2), (2, 22.8, 0.5))
+    pool.policy_idx[1] = -1
+    assert tz.hold(pool, 0, 1000, 0.05, 0) == []

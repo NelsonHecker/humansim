@@ -70,6 +70,16 @@ def _center(zone: Zone) -> tuple[float, float]:
     return cx / (3.0 * area), cy / (3.0 * area)
 
 
+def _lane(zone: Zone) -> Pose2D:
+    """Point on the hold line halfway to the right side and LANE_MARGIN off it, the hold pose on a half too narrow for that."""
+    ax, ay = zone.axis
+    right = min((-(x - zone.hold.x) * ay + (y - zone.hold.y) * ax for x, y in zone.footprint), default=0.0)
+    across = max(right / 2.0, right + LANE_MARGIN)
+    if across >= 0.0:
+        return zone.hold
+    return Pose2D(x=zone.hold.x - ay * across, y=zone.hold.y + ax * across, theta=zone.hold.theta)
+
+
 @attrs.frozen
 class Zone:
     name: str
@@ -83,6 +93,7 @@ class Zone:
     belt: float = 0.0
     slots: tuple[Pose2D, ...] = attrs.field(init=False, default=attrs.Factory(_slots, takes_self=True))
     center: tuple[float, float] = attrs.field(init=False, default=attrs.Factory(_center, takes_self=True))
+    lane: Pose2D = attrs.field(init=False, default=attrs.Factory(_lane, takes_self=True))
 
     @property
     def axis(self) -> tuple[float, float]:
@@ -164,6 +175,7 @@ class TeleportZones:
         self._joined: dict[str, str] = {}
         self.gates: list[Segment] = []
         self.through: dict[int, Pose2D] = {}
+        self._landed: dict[int, str] = {}
 
     def set_zones(self, zones: Sequence[Zone], is_open: Sequence[bool]) -> None:
         """Replace every zone, keeping the transfers through zones that come back unchanged or stairs that keep their destination."""
@@ -210,6 +222,7 @@ class TeleportZones:
         self._walks.clear()
         self.riders.clear()
         self._held.clear()
+        self._landed.clear()
 
     def forget(self, aid: int) -> None:
         self.transfers.pop(aid, None)
@@ -219,7 +232,7 @@ class TeleportZones:
         self.through.pop(aid, None)
 
     def steer(self, agents: Sequence[BaseAgent], cmds: dict[int, HighLevelCommand]) -> dict[int, HighLevelCommand]:
-        """Commands with each transferring pedestrian's target swapped for its cabin's wait pose or spot inside, or its stair's seam trigger point, short of the seam on a pair joined in place. `through` holds the subgoals that bypass the planners."""
+        """Commands with each transferring pedestrian's target swapped for its cabin's wait pose or spot inside, or its stair's lane point on the hold line, short of the seam on a pair joined in place. `through` holds the subgoals that bypass the planners."""
         self.through = {}
         if not self.zones:
             return cmds
@@ -294,9 +307,9 @@ class TeleportZones:
         return out
 
     def _inner(self, zone: Zone, across: float = 0.0) -> Pose2D:
-        """Where a stair half is walked to: its hold pose, on a pair joined in place a point short of the seam `across` meters off its center line."""
+        """Where a stair half is walked to: its lane point on the hold line, on a pair joined in place a point short of the seam `across` meters off its center line."""
         if zone.name not in self._joined:
-            return zone.hold
+            return zone.lane
         sides = [zone.across(x, y) for x, y in zone.footprint]
         right, left = min(sides) + LANE_MARGIN, max(sides) - LANE_MARGIN
         across = min(max(across, right), left) if right <= left else (right + left) / 2.0
@@ -411,38 +424,71 @@ class TeleportZones:
         return lx, ly, math.remainder(theta + dest.entry.theta + math.pi - zone.entry.theta, math.tau)
 
     @staticmethod
-    def _occupied(pool: AgentPool, i: int, x: float, y: float, landed: Sequence[tuple[float, float, float]]) -> bool:
-        """Whether row i standing at x, y would overlap another agent or a landing already taken this tick."""
+    def _occupants(pool: AgentPool, i: int, x: float, y: float) -> list[int]:
+        """Rows other than i that row i standing at x, y would overlap."""
         n, r = pool.n, float(pool.agent_radius[i])
         overlap = np.hypot(pool.pos[:n, 0] - x, pool.pos[:n, 1] - y) < pool.agent_radius[:n] + r
         overlap[i] = False
-        return bool(overlap.any()) or any(math.hypot(lx - x, ly - y) < lr + r for lx, ly, lr in landed)
+        return np.flatnonzero(overlap).tolist()
+
+    def _fits(self, pool: AgentPool, i: int, j: int, landed: Sequence[tuple[float, float, float]]) -> bool:
+        """Whether row i can stand where row j stands once j has left: clear of this tick's landings, and of the other agents when it is the larger of the two."""
+        x, y, r = float(pool.pos[j, 0]), float(pool.pos[j, 1]), float(pool.agent_radius[i])
+        if any(math.hypot(lx - x, ly - y) < lr + r for lx, ly, lr in landed):
+            return False
+        return r <= float(pool.agent_radius[j]) or self._occupants(pool, i, x, y) == [j]
 
     def _cross(self, pool: AgentPool) -> list[tuple[int, float, float, float]]:
-        """Teleports of the pedestrians past a stair seam whose landing is clear, the others held still at the seam."""
+        """Teleports of the pedestrians past a stair seam whose landing is clear or who swap spots crossing one stair opposite ways, the others held still at the seam."""
+        rows = self._on_stairs(pool)
+        on = {int(pool.agent_ids[i]): zone.name for i, zone in rows}
+        self._landed = {aid: name for aid, name in self._landed.items() if on.get(aid) == name}
         self._held = set()
-        teleports: list[tuple[int, float, float, float]] = []
-        landed: list[tuple[float, float, float]] = []
-        for i, zone in self._on_stairs(pool):
+        crossing: dict[int, tuple[Zone, Zone, float, float, float]] = {}
+        for i, zone in rows:
             x, y = float(pool.pos[i, 0]), float(pool.pos[i, 1])
-            if not zone.destinations or zone.name in self._joined or not zone.past_seam(x, y):
-                continue
             aid = int(pool.agent_ids[i])
             transfer = self.transfers.get(aid)
-            dest = transfer.destination if transfer is not None and transfer.zone == zone.name else zone.destinations[0]
-            lx, ly, theta = self._landing(zone, self.zones[dest], x, y, float(pool.theta[i]))
-            if self._occupied(pool, i, lx, ly, landed):
-                self._held.add(aid)
-                ax, ay = zone.axis
-                excess = zone.along(x, y) - zone.along(zone.hold.x, zone.hold.y)
-                pool.pos[i, 0] = x - excess * ax
-                pool.pos[i, 1] = y - excess * ay
-                pool.vel[i] = 0.0
-                pool.prev_vel[i] = 0.0
-                pool.desired_vel[i] = 0.0
+            routed = transfer.destination if transfer is not None and transfer.zone == zone.name else None
+            if not zone.destinations or zone.name in self._joined or (self._landed.get(aid) == zone.name and routed is None) or not zone.past_seam(x, y):
                 continue
-            landed.append((lx, ly, float(pool.agent_radius[i])))
-            teleports.append((aid, lx, ly, theta))
+            dest = self.zones[routed or zone.destinations[0]]
+            crossing[i] = (zone, dest, *self._landing(zone, dest, x, y, float(pool.theta[i])))
+        moves: dict[int, tuple[float, float, float]] = {}
+        blocked: dict[int, list[int]] = {}
+        landed: list[tuple[float, float, float]] = []
+        for i, (_, _, lx, ly, theta) in crossing.items():
+            r = float(pool.agent_radius[i])
+            others = self._occupants(pool, i, lx, ly)
+            if others or any(math.hypot(ox - lx, oy - ly) < orad + r for ox, oy, orad in landed):
+                blocked[i] = others
+                continue
+            moves[i] = (lx, ly, theta)
+            landed.append((lx, ly, r))
+        for i, others in blocked.items():
+            zone, dest = crossing[i][:2]
+            for j in others:
+                if i in moves or j in moves or j not in blocked or crossing[j][0] is not dest or crossing[j][1] is not zone or not self._fits(pool, i, j, landed) or not self._fits(pool, j, i, landed):
+                    continue
+                for a, b in ((i, j), (j, i)):
+                    moves[a] = (float(pool.pos[b, 0]), float(pool.pos[b, 1]), crossing[a][4])
+                    landed.append((*moves[a][:2], float(pool.agent_radius[a])))
+        teleports: list[tuple[int, float, float, float]] = []
+        for i, (zone, dest, *_) in crossing.items():
+            aid = int(pool.agent_ids[i])
+            if i in moves:
+                self._landed[aid] = dest.name
+                teleports.append((aid, *moves[i]))
+                continue
+            self._held.add(aid)
+            x, y = float(pool.pos[i, 0]), float(pool.pos[i, 1])
+            ax, ay = zone.axis
+            excess = zone.along(x, y) - zone.along(zone.hold.x, zone.hold.y)
+            pool.pos[i, 0] = x - excess * ax
+            pool.pos[i, 1] = y - excess * ay
+            pool.vel[i] = 0.0
+            pool.prev_vel[i] = 0.0
+            pool.desired_vel[i] = 0.0
         return teleports
 
     def hold(self, pool: AgentPool, tick: int, timeout_ticks: int, dt: float, let_out_ticks: int) -> list[tuple[int, float, float, float]]:
