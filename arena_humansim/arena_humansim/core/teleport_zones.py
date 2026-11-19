@@ -279,7 +279,7 @@ class TeleportZones:
                     if edge is None:
                         self.transfers.pop(aid, None)
                         plan = plans.get(aid)
-                        if plan and any(self.zones[name].kind not in climbs and self.zones[name].contains(plan[-1].x, plan[-1].y) and not self.zones[name].contains(*goal) for name in self._joined):
+                        if plan and any((name in blocked[climbs] or not self.zones[name].destinations) and self.zones[name].contains(plan[-1].x, plan[-1].y) and not self.zones[name].contains(*goal) for name in self._joined):
                             self.through[aid] = agent.state.pose
                         continue
                     if transfer is None or (transfer.zone, transfer.destination) != edge:
