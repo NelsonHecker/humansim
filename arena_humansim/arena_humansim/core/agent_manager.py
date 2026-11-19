@@ -3274,7 +3274,7 @@ class AgentManager(Node):
         return segments
 
     def _walls_of(self, subsystem: WallAware, segments: Segments) -> Segments:
-        """The walls a subsystem takes: a global planner also the seams of the stairs joined in place, which pedestrians cross only on a stair route."""
+        """The walls a subsystem takes, for a global planner with the seams of the stairs joined in place."""
         return [*segments, *self._zones.gates] if isinstance(subsystem, GlobalPlanner) else segments
 
     def _refresh_planners(self):

@@ -188,7 +188,7 @@ class TeleportZones:
         self._join()
 
     def _join(self) -> None:
-        """Find the stair halves that meet their partner in place, as the halves of a stair on one level do, and the seam of every such pair."""
+        """Find the stair halves that meet their partner in place and the seam of each pair."""
         self._joined = {}
         gates: dict[frozenset[str], Segment] = {}
         for name, zone in self.zones.items():
@@ -219,7 +219,7 @@ class TeleportZones:
         self.through.pop(aid, None)
 
     def steer(self, agents: Sequence[BaseAgent], cmds: dict[int, HighLevelCommand]) -> dict[int, HighLevelCommand]:
-        """Commands with each transferring pedestrian's target swapped for its cabin's wait pose or spot inside, or its stair's seam trigger point, a point well inside the half on a pair joined in place. `through` takes the subgoals that pass over the planners: the point straight on past the far mouth for a pedestrian crossing such a pair, its own pose for one whose plan would end on a half of a kind it does not climb."""
+        """Commands with each transferring pedestrian's target swapped for its cabin's wait pose or spot inside, or its stair's seam trigger point, short of the seam on a pair joined in place. `through` holds the subgoals that bypass the planners."""
         self.through = {}
         if not self.zones:
             return cmds
@@ -294,7 +294,7 @@ class TeleportZones:
         return out
 
     def _inner(self, zone: Zone, across: float = 0.0) -> Pose2D:
-        """Where a stair half is walked to: its hold pose, on a pair joined in place a point well short of the seam, which the planners keep shut, `across` meters off its center line, so that riders keep their own lines and pass the ones coming the other way."""
+        """Where a stair half is walked to: its hold pose, on a pair joined in place a point short of the seam `across` meters off its center line."""
         if zone.name not in self._joined:
             return zone.hold
         sides = [zone.across(x, y) for x, y in zone.footprint]
@@ -303,7 +303,7 @@ class TeleportZones:
         return attrs.evolve(zone.point(max(zone.length - THROUGH_CLEAR, zone.length / 2.0), across), theta=zone.hold.theta)
 
     def _ride(self, planner: GlobalPlanner, agent: BaseAgent, target: Pose2D, goal: tuple[float, float], blocked: set[str]) -> tuple[str, str] | None:
-        """Zone and destination of the first stair on the quickest way to a goal over walks and stair rides, None when walking alone is quicker or no stair leads there, which is kept for the goal while the same halves stay shut."""
+        """Zone and destination of the first stair on the quickest way to a goal, None when walking is quicker or no stair leads there."""
         aid = agent.state.agent_id
         key = (goal, frozenset(blocked))
         if self._walks.get(aid) == key:
