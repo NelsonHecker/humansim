@@ -231,6 +231,12 @@ def with_robot_awareness(perception: "SampledPerception", draw: AwarenessDraw) -
     )
 
 
+def _as_effort_dist(val: "ParamDist | float | Mapping[str, float]") -> "ParamDist":
+    if isinstance(val, dict):
+        return ParamDist(**{"clip_low": 1.0, "clip_high": 3.0, **val})
+    return _as_paramdist(val)
+
+
 @attrs.frozen
 class NeedDist:
     initial: ParamDist = attrs.field(default=ParamDist(100.0), converter=_as_paramdist)
@@ -544,6 +550,7 @@ class AgentType:
     interaction_class: str = ""
     assets: tuple[str, ...] = ()
     climbs: tuple[str, ...] = attrs.field(default=STAIRS_KINDS, converter=tuple, validator=attrs.validators.deep_iterable(attrs.validators.in_(STAIRS_KINDS)))
+    stair_effort: ParamDist = attrs.field(default=ParamDist(1.6, 0.5, clip_low=1.0, clip_high=3.0), converter=_as_effort_dist)
 
     perception_stack: tuple[str, ...] = ("default",)
     local_planner: str | None = None
@@ -623,6 +630,7 @@ class SampledParams:
     locomotion: SampledLocomotion = attrs.Factory(SampledLocomotion)
     interaction_class: str = ""
     climbs: tuple[str, ...] = STAIRS_KINDS
+    stair_effort: float = 1.0
 
     perception_stack: tuple[str, ...] = ("default",)
     local_planner: str | None = None
@@ -732,6 +740,7 @@ def sample_agent_type(
     idle_gaze_rate_hz = _sample_dist(agent_type.idle_gaze_rate, rng)
     handedness = _sample_handedness(agent_type.handedness, rng)
     locomotion = _sample_locomotion(agent_type, rng)
+    stair_effort = _sample_dist(agent_type.stair_effort, rng)
 
     return SampledParams(
         name=agent_type.name,
@@ -749,6 +758,7 @@ def sample_agent_type(
         locomotion=locomotion,
         interaction_class=agent_type.interaction_class,
         climbs=agent_type.climbs,
+        stair_effort=stair_effort,
         perception_stack=agent_type.perception_stack,
         local_planner=agent_type.local_planner,
         global_planner=agent_type.global_planner,

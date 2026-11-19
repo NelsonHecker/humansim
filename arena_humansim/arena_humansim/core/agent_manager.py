@@ -949,7 +949,7 @@ class AgentManager(TimeNode):
         agents = [self._agents[aid] for aid in self._pool_agent_ids if aid in self._agents]
         self._pool.attach_late(planner, agents)
         self._wall_aware = (*self._wall_aware, planner)
-        segments = self._all_wall_segments()
+        segments = self._walls_of(planner, self._all_wall_segments())
         if segments:
             planner.set_walls(segments)
 
@@ -1606,6 +1606,7 @@ class AgentManager(TimeNode):
             self._cached_intermediate_goals = {}
             for planner, _group in _group_by(subgoal_agents, key=lambda a: a.global_planner):
                 self._cached_intermediate_goals.update(planner.get_cached_goals())
+            self._cached_intermediate_goals.update(self._zones.through)
 
             for aid in self._high_level_cmds:
                 if aid not in needs_subgoal_ids:
@@ -3179,11 +3180,15 @@ class AgentManager(TimeNode):
             segments.extend(obs.wall_segments)
         return segments
 
+    def _walls_of(self, subsystem: WallAware, segments: Segments) -> Segments:
+        """The walls a subsystem takes, for a global planner with the seams of the stairs joined in place."""
+        return [*segments, *self._zones.gates] if isinstance(subsystem, GlobalPlanner) else segments
+
     def _refresh_planners(self):
         """Push current wall segments to local planner, global planner, and collision."""
         segments = self._all_wall_segments()
         for subsystem in self._wall_aware:
-            subsystem.set_walls(segments)
+            subsystem.set_walls(self._walls_of(subsystem, segments))
 
     def _publish_world_geometry(self) -> None:
         msg = WorldGeometryMsg()
@@ -3274,7 +3279,10 @@ class AgentManager(TimeNode):
             )
             for z in request.zones
         ]
+        gates = self._zones.gates
         self._zones.set_zones(zones, [z.open for z in request.zones])
+        if self._zones.gates != gates:
+            self._refresh_planners()
         response.success = True
         response.message = f"Set {len(zones)} teleport zone(s)"
         self._logger.debug(response.message)
