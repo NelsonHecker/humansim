@@ -29,3 +29,5 @@ pose:
   hold: {l: {radius: 0.009, curls: [0.3, 0.67, 0.82, 0.75, 0.51]}, r: {radius: 0.009, curls: [0.3, 0.67, 0.82, 0.75, 0.51]}}
   walk: {base: walk_walkingframe}
   run: {same_as: walk}
+
+device: {kind: walking_frame, model: Common/Object/WalkerFitted}
