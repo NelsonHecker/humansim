@@ -61,7 +61,7 @@ def _center(zone: Zone) -> tuple[float, float]:
 
 
 def _lane(zone: Zone) -> Pose2D:
-    """Point on the hold line halfway to the footprint's right side, LANE_MARGIN off it at least, the hold pose where the footprint leaves no room for that."""
+    """Point on the hold line halfway to the right side and LANE_MARGIN off it, the hold pose on a half too narrow for that."""
     ax, ay = zone.axis
     right = min((-(x - zone.hold.x) * ay + (y - zone.hold.y) * ax for x, y in zone.footprint), default=0.0)
     across = max(right / 2.0, right + LANE_MARGIN)
@@ -308,7 +308,7 @@ class TeleportZones:
         return r <= float(pool.agent_radius[j]) or self._occupants(pool, i, x, y) == [j]
 
     def _cross(self, pool: AgentPool) -> list[tuple[int, float, float, float]]:
-        """Teleports of the pedestrians past a stair seam: onto a clear landing, or onto each other's spots for two crossing one stair opposite ways with one on the other's landing. The others are held still at the seam, and nobody crosses back from the half it landed on before it has left it, unless routed back over it."""
+        """Teleports of the pedestrians past a stair seam whose landing is clear or who swap spots crossing one stair opposite ways, the others held still at the seam."""
         rows = self._on_stairs(pool)
         on = {int(pool.agent_ids[i]): zone.name for i, zone in rows}
         self._landed = {aid: name for aid, name in self._landed.items() if on.get(aid) == name}
