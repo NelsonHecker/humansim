@@ -309,16 +309,18 @@ class TeleportZones:
         if self._walks.get(aid) == key:
             return None
         rides = [(name, dest) for name, zone in sorted(self.zones.items()) if name in self._joined and name not in blocked for dest in zone.destinations if dest in self.zones]
-        if rides:
-            near = agent.state.pose
-            speed = max(agent.params.desired_velocity, 0.1)
-            walk = _walk_time(planner.paths([(near, target)])[0], speed)
-            ride = [self._ride_time(name, dest, speed, agent.params.stair_effort) for name, dest in rides]
-            reach = [math.hypot(self.zones[name].entry.x - near.x, self.zones[name].entry.y - near.y) / speed for name, _ in rides]
-            rest = [math.hypot(target.x - self.zones[dest].entry.x, target.y - self.zones[dest].entry.y) / speed for _, dest in rides]
-            first, last = min(map(operator.add, reach, ride)), min(map(operator.add, ride, rest))
-            kept = [i for i in range(len(rides)) if min(reach[i], first) + ride[i] + min(rest[i], last) < walk]
-            rides, ride = [rides[i] for i in kept], [ride[i] for i in kept]
+        if not rides:
+            self._walks[aid] = key
+            return None
+        near = agent.state.pose
+        speed = max(agent.params.desired_velocity, 0.1)
+        walk = _walk_time(planner.paths([(near, target)])[0], speed)
+        ride = [self._ride_time(name, dest, speed, agent.params.stair_effort) for name, dest in rides]
+        reach = [math.hypot(self.zones[name].entry.x - near.x, self.zones[name].entry.y - near.y) / speed for name, _ in rides]
+        rest = [math.hypot(target.x - self.zones[dest].entry.x, target.y - self.zones[dest].entry.y) / speed for _, dest in rides]
+        first, last = min(map(operator.add, reach, ride)), min(map(operator.add, ride, rest))
+        kept = [i for i in range(len(rides)) if min(reach[i], first) + ride[i] + min(rest[i], last) < walk]
+        rides, ride = [rides[i] for i in kept], [ride[i] for i in kept]
         if rides:
             mouths = [self.zones[name].entry for name, _ in rides]
             lands = [self.zones[dest].entry for _, dest in rides]
