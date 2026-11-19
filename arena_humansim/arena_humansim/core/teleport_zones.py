@@ -318,10 +318,10 @@ class TeleportZones:
             x, y = float(pool.pos[i, 0]), float(pool.pos[i, 1])
             aid = int(pool.agent_ids[i])
             transfer = self.transfers.get(aid)
-            routed = transfer is not None and transfer.zone == zone.name
-            if not zone.destinations or (self._landed.get(aid) == zone.name and not routed) or not zone.past_seam(x, y):
+            routed = transfer.destination if transfer is not None and transfer.zone == zone.name else None
+            if not zone.destinations or (self._landed.get(aid) == zone.name and routed is None) or not zone.past_seam(x, y):
                 continue
-            dest = self.zones[transfer.destination if routed else zone.destinations[0]]
+            dest = self.zones[routed or zone.destinations[0]]
             crossing[i] = (zone, dest, *self._landing(zone, dest, x, y, float(pool.theta[i])))
         moves: dict[int, tuple[float, float, float]] = {}
         blocked: dict[int, list[int]] = {}
