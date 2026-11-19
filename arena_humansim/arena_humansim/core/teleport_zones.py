@@ -177,7 +177,7 @@ class TeleportZones:
         self._held.discard(aid)
 
     def steer(self, agents: Sequence[BaseAgent], cmds: dict[int, HighLevelCommand]) -> dict[int, HighLevelCommand]:
-        """Commands with each transferring pedestrian's target swapped for its cabin's wait pose or spot inside, or its stair's seam trigger point."""
+        """Commands with each transferring pedestrian's target swapped for its cabin's wait pose or spot inside, or its stair's lane point on the hold line."""
         if not self.zones:
             return cmds
         out = dict(cmds)
