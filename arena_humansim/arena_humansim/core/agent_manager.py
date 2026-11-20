@@ -4,7 +4,7 @@ import array
 import math
 import time
 from collections import deque
-from collections.abc import Callable, Hashable, Iterable, Sequence
+from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -116,6 +116,8 @@ from arena_humansim.params import AGENT_MANAGER_PARAMS, GESTURE_ENABLED, MODE_MA
 from arena_humansim.perception import Perception
 from arena_humansim.utils import RNG
 from arena_humansim.utils.event_bus import EventBus
+from arena_humansim.utils.geometry import box_wall_segments
+from arena_humansim.utils.lanes import resolve_clearance, resolve_lane, sigma_metres
 from arena_humansim.utils.loggable import Loggable
 from arena_humansim.utils.scenario import EventScript, InteractionScript, ScenarioConfig
 from arena_humansim.utils.types import (
@@ -128,6 +130,9 @@ from arena_humansim.utils.types import (
     HighLevelCommand,
     InteractionOutcome,
     InteractionState,
+    Lane,
+    LaneConfig,
+    LaneSide,
     Pose2D,
     SeekSpec,
     Segments,
@@ -142,6 +147,10 @@ from arena_humansim.utils.types import (
     WorldAgentState,
     WorldState,
 )
+
+
+def _positive_or_none(value: float) -> float | None:
+    return value if value > 0.0 else None
 
 
 @attrs.define
@@ -497,6 +506,7 @@ class AgentManager(Node):
         self._external_velocity_ticks = max(1, int(round(_EXTERNAL_VELOCITY_WINDOW_S / self._dt)))
         self._walls: dict[str, tuple[tuple[float, float], tuple[float, float]]] = {}
         self._obstacles: dict[str, ObstacleData] = {}
+        self._lane_sources: dict[str, SourceConfig] = {}
         self._zones = TeleportZones()
         self._prone: set[int] = set()
         self._parked_from: dict[int, tuple[float, float, float]] = {}
@@ -2932,6 +2942,7 @@ class AgentManager(Node):
         self._interaction_scripts_by_tick.clear()
         self._walls.clear()
         self._obstacles.clear()
+        self._lane_sources.clear()
         self._zones.set_zones([], [])
         for subsystem in self._wall_aware:
             subsystem.set_walls([])
@@ -3060,6 +3071,33 @@ class AgentManager(Node):
                 sink_affinity=[SinkAffinity(sink_name=sa.sink_name, weight=sa.weight) for sa in src_msg.agent.sink_affinity],
                 robot_awareness=awareness_from_text(src_msg.agent.robot_awareness),
             ),
+            lane_config=AgentManager._lane_config_from_msg(src_msg),
+        )
+
+    @staticmethod
+    def _lane_config_from_msg(src_msg: SourceConfigMsg) -> LaneConfig | None:
+        lane = src_msg.lane
+        if not lane.segments:
+            return None
+        if not lane.side:
+            raise ValueError(f"source {src_msg.name!r}: a lane needs a side (right, left or centre)")
+        try:
+            side = LaneSide(lane.side)
+        except ValueError:
+            raise ValueError(f"source {src_msg.name!r}: unknown lane side {lane.side!r}") from None
+        defaults = LaneConfig(centrelines=[], side=side)
+        return LaneConfig(
+            centrelines=[[Pose2D(x=point.x, y=point.y, theta=0.0) for point in segment.centreline] for segment in lane.segments],
+            side=side,
+            two_way=lane.two_way,
+            offset=lane.offset if lane.has_offset else None,
+            sigma_q=lane.sigma_q or defaults.sigma_q,
+            chord_tolerance=lane.chord_tolerance or defaults.chord_tolerance,
+            track_spacing=_positive_or_none(lane.track_spacing),
+            arrival_radius=_positive_or_none(lane.arrival_radius),
+            merge_length=_positive_or_none(lane.merge_length),
+            spawn_length=_positive_or_none(lane.spawn_length),
+            sweep_length=_positive_or_none(lane.sweep_length),
         )
 
     @staticmethod
@@ -3073,9 +3111,11 @@ class AgentManager(Node):
         )
 
     def _set_flow_callback(self, request: SetFlow.Request, response: SetFlow.Response) -> SetFlow.Response:
+        sinks = {sink.name: sink for sink in (self._sink_msg_to_config(sink_msg) for sink_msg in request.flow.sinks)}
         try:
             sources = [self._source_msg_to_config(src_msg) for src_msg in request.flow.sources]
             for src in sources:
+                self._attach_lane(src, sinks)
                 self._spawn_scheduler.validate(src)
         except ValueError as e:
             response.success = False
@@ -3085,14 +3125,14 @@ class AgentManager(Node):
 
         self._spawn_scheduler.clear_sources()
         self._despawn_monitor.clear_sinks()
+        self._lane_sources.clear()
 
         for src in sources:
             self._spawn_scheduler.add_source(src)
+            if src.lane_config is not None:
+                self._lane_sources[src.name] = src
 
-        sinks = {}
-        for sink_msg in request.flow.sinks:
-            sink = self._sink_msg_to_config(sink_msg)
-            sinks[sink.name] = sink
+        for sink in sinks.values():
             self._despawn_monitor.add_sink(sink)
 
         self._spawn_scheduler.set_sinks(sinks)
@@ -3128,12 +3168,20 @@ class AgentManager(Node):
     def _add_source_callback(self, request: AddSource.Request, response: AddSource.Response) -> AddSource.Response:
         try:
             src = self._source_msg_to_config(request.source)
+            self._attach_lane(src, self._despawn_monitor.sinks)
             self._spawn_scheduler.add_source(src)
         except ValueError as e:
             response.success = False
             response.message = str(e)
             self._logger.error(response.message)
             return response
+        if src.lane_config is not None:
+            self._lane_sources[src.name] = src
+        if src.lane is not None:
+            response.track_spacing = src.lane.settings.track_spacing
+            response.arrival_radius = src.lane.settings.arrival_radius
+            response.spawn_length = src.lane.settings.spawn_length
+            response.sigma_m = sigma_metres(src.lane)
         response.success = True
         response.message = f"Added source {src.name}"
         response.name = src.name
@@ -3143,9 +3191,11 @@ class AgentManager(Node):
     def _remove_source_callback(self, request: RemoveSource.Request, response: RemoveSource.Response) -> RemoveSource.Response:
         if not request.name:
             self._spawn_scheduler.clear_sources()
+            self._lane_sources.clear()
             response.message = "Removed all sources"
         else:
             self._spawn_scheduler.remove_source(request.name)
+            self._lane_sources.pop(request.name, None)
             response.message = f"Removed source {request.name}"
         response.success = True
         self._logger.debug(response.message)
@@ -3173,6 +3223,43 @@ class AgentManager(Node):
         response.success = True
         self._logger.debug(response.message)
         return response
+
+    def _attach_lane(self, src: SourceConfig, sinks: Mapping[str, SinkConfig]) -> None:
+        if src.lane_config is not None:
+            src.lane = self._build_source_lane(src, self._all_wall_segments(), sinks)
+
+    def _build_source_lane(self, src: SourceConfig, walls: Segments, sinks: Mapping[str, SinkConfig]) -> Lane:
+        clearance = resolve_clearance(self._float_param("global_planner.inflation_radius"), self._float_param("global_planner.resolution"))
+        return resolve_lane(src, walls, sinks, clearance)
+
+    def _rebuild_lanes(self) -> str | None:
+        """Rebuild every lane on the current walls, or return why one no longer builds."""
+        walls = self._all_wall_segments()
+        sinks = self._despawn_monitor.sinks
+        rebuilt: list[tuple[SourceConfig, Lane]] = []
+        for src in self._lane_sources.values():
+            try:
+                rebuilt.append((src, self._build_source_lane(src, walls, sinks)))
+            except ValueError as e:
+                return str(e)
+        for src, lane in rebuilt:
+            src.lane = lane
+        return None
+
+    def _refuse_lane_break(
+        self,
+        walls_before: Mapping[str, tuple[tuple[float, float], tuple[float, float]]],
+        obstacles_before: Mapping[str, ObstacleData],
+    ) -> str | None:
+        """Restore the walls and obstacles when a lane no longer builds on them."""
+        refusal = self._rebuild_lanes()
+        if refusal is None:
+            return None
+        self._walls.clear()
+        self._walls.update(walls_before)
+        self._obstacles.clear()
+        self._obstacles.update(obstacles_before)
+        return refusal
 
     def _all_wall_segments(self) -> Segments:
         """Collect wall segments from both explicit walls and obstacle bounding boxes."""
@@ -3228,8 +3315,14 @@ class AgentManager(Node):
         self._world_geometry_pub.publish(msg)
 
     def _add_walls_callback(self, request: AddWalls.Request, response: AddWalls.Response) -> AddWalls.Response:
+        walls_before, obstacles_before = dict(self._walls), dict(self._obstacles)
         for name, start, end in zip(request.names, request.starts, request.ends, strict=True):
             self._walls[name] = ((start.x, start.y), (end.x, end.y))
+        if refusal := self._refuse_lane_break(walls_before, obstacles_before):
+            response.success = False
+            response.message = refusal
+            self._logger.error(refusal)
+            return response
         self._refresh_planners()
         self._publish_world_geometry()
         response.success = True
@@ -3238,6 +3331,7 @@ class AgentManager(Node):
         return response
 
     def _remove_walls_callback(self, request: RemoveWalls.Request, response: RemoveWalls.Response) -> RemoveWalls.Response:
+        walls_before, obstacles_before = dict(self._walls), dict(self._obstacles)
         if not request.names:
             self._walls.clear()
             response.message = "Removed all walls"
@@ -3245,6 +3339,11 @@ class AgentManager(Node):
             for name in request.names:
                 self._walls.pop(name, None)
             response.message = f"Removed {len(request.names)} wall(s), remaining {len(self._walls)}"
+        if refusal := self._refuse_lane_break(walls_before, obstacles_before):
+            response.success = False
+            response.message = refusal
+            self._logger.error(refusal)
+            return response
         self._refresh_planners()
         self._publish_world_geometry()
         response.success = True
@@ -3311,41 +3410,14 @@ class AgentManager(Node):
         self._logger.debug(response.message)
         return response
 
-    @staticmethod
-    def _decompose_obstacle_to_walls(
-        pose: Pose2D,
-        x_min: float,
-        x_max: float,
-        y_min: float,
-        y_max: float,
-    ) -> list[tuple[tuple[float, float], tuple[float, float]]]:
-        """Convert a rotated 2D bounding box into 4 wall segments."""
-        cos_t, sin_t = math.cos(pose.theta), math.sin(pose.theta)
-        corners_local = [
-            (x_min, y_min),
-            (x_min, y_max),
-            (x_max, y_max),
-            (x_max, y_min),
-        ]
-        corners_world = []
-        for lx, ly in corners_local:
-            wx = pose.x + cos_t * lx - sin_t * ly
-            wy = pose.y + sin_t * lx + cos_t * ly
-            corners_world.append((wx, wy))
-
-        segments = []
-        for i in range(4):
-            j = (i + 1) % 4
-            segments.append((corners_world[i], corners_world[j]))
-        return segments
-
     def _add_obstacles_callback(self, request: AddObstacles.Request, response: AddObstacles.Response) -> AddObstacles.Response:
+        walls_before, obstacles_before = dict(self._walls), dict(self._obstacles)
         added = 0
         for obs_msg in request.obstacles:
             if obs_msg.name in self._obstacles:
                 continue  # noop if already exists
             pose = Pose2D(x=obs_msg.pose.x, y=obs_msg.pose.y, theta=obs_msg.pose.theta)
-            wall_segments = self._decompose_obstacle_to_walls(
+            wall_segments = box_wall_segments(
                 pose,
                 obs_msg.bb_x_min,
                 obs_msg.bb_x_max,
@@ -3368,6 +3440,11 @@ class AgentManager(Node):
                 wall_segments=tuple(wall_segments),
             )
             added += 1
+        if refusal := self._refuse_lane_break(walls_before, obstacles_before):
+            response.success = False
+            response.message = refusal
+            self._logger.error(refusal)
+            return response
         if added:
             self._refresh_planners()
             self._publish_world_geometry()
@@ -3377,6 +3454,7 @@ class AgentManager(Node):
         return response
 
     def _remove_obstacles_callback(self, request: RemoveObstacles.Request, response: RemoveObstacles.Response) -> RemoveObstacles.Response:
+        walls_before, obstacles_before = dict(self._walls), dict(self._obstacles)
         if not request.names:
             self._obstacles.clear()
             response.message = "Removed all obstacles"
@@ -3384,6 +3462,11 @@ class AgentManager(Node):
             for name in request.names:
                 self._obstacles.pop(name, None)
             response.message = f"Removed {len(request.names)} obstacle(s), remaining {len(self._obstacles)}"
+        if refusal := self._refuse_lane_break(walls_before, obstacles_before):
+            response.success = False
+            response.message = refusal
+            self._logger.error(refusal)
+            return response
         self._refresh_planners()
         self._publish_world_geometry()
         response.success = True
