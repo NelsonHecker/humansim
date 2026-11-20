@@ -31,6 +31,7 @@ GRID_EPS = 1e-9
 VERTEX_EPS = 1e-9
 WALL_DISTANCE_CHUNK = 4096
 BAND_SAMPLES = 41
+DEFAULT_AGENT_RADIUS = 0.35
 
 Run = tuple[float, float]
 
@@ -340,11 +341,12 @@ def resolve_lane(
     if sink_name not in sinks:
         raise ValueError(f"flow {source.name!r}: sink {sink_name!r} is not declared")
     tangent = _first_tangent(config, source.name)
+    agent_radius = source.agent.agent_radius if source.agent.agent_radius > 0.0 else DEFAULT_AGENT_RADIUS
     lane = build_lane(
         config,
         walls,
         flow=source.name,
-        agent_radius=source.agent.agent_radius,
+        agent_radius=agent_radius,
         clearance=clearance,
         source_extent=_source_extent(source.shape, tangent),
     )
