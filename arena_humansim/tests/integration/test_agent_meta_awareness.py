@@ -104,6 +104,6 @@ def test_agent_meta_publishes_a_scared_crowd_with_wider_fov_and_more_repulsion(m
     for _, fov_offset, repulsion_gain, reaction_gain, blind in pool.values():
         assert fov_offset > 0.0
         assert repulsion_gain > 1.0
-        assert reaction_gain == pytest.approx(1.0)
+        assert reaction_gain > 1.0
         assert not blind
     _assert_meta_carries_pool_values(meta, pool)

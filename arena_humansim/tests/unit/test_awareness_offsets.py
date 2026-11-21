@@ -42,17 +42,17 @@ def test_normal_awareness_adds_no_robot_offset() -> None:
 def test_distracted_moves_each_dimension_by_its_own_sigma() -> None:
     draw = sample_awareness(AWARENESS_PRESETS["distracted"], np.random.default_rng(1))
     perception = with_robot_awareness(_base_perception(), draw)
-    assert perception.robot_range_offset == pytest.approx(-2.0 * 0.5)
-    assert perception.robot_fov_offset == pytest.approx(-1.0 * 10.0)
-    assert perception.robot_repulsion_gain == pytest.approx(1.0 - 1.0 * 0.1)
-    assert perception.robot_reaction_gain == pytest.approx(1.0 - 1.0 * 0.1)
+    assert perception.robot_range_offset == pytest.approx(-5.0 * 0.5)
+    assert perception.robot_fov_offset == pytest.approx(-8.0 * 10.0)
+    assert perception.robot_repulsion_gain == pytest.approx(1.0 - 3.0 * 0.1)
+    assert perception.robot_reaction_gain == pytest.approx(1.0 - 3.0 * 0.1)
 
 
-def test_aggressive_lengthens_the_robot_interaction_range() -> None:
+def test_aggressive_tolerates_robots_closer_and_reacts_later() -> None:
     draw = sample_awareness(AWARENESS_PRESETS["aggressive"], np.random.default_rng(1))
     perception = with_robot_awareness(_base_perception(), draw)
-    assert perception.robot_repulsion_gain == pytest.approx(1.0 - 2.0 * 0.1)
-    assert perception.robot_reaction_gain == pytest.approx(1.0 + 1.0 * 0.1)
+    assert perception.robot_repulsion_gain == pytest.approx(1.0 - 4.0 * 0.1)
+    assert perception.robot_reaction_gain == pytest.approx(1.0 - 2.0 * 0.1)
 
 
 def test_repulsion_gain_clips_at_zero_for_a_shift_past_zero() -> None:
@@ -72,14 +72,21 @@ def test_override_awareness_scales_by_the_sampled_type_spreads() -> None:
     perception = with_robot_awareness(params.perception, sample_awareness(AWARENESS_PRESETS["scared"], rng))
     assert perception.vision_range_sd == pytest.approx(0.5)
     assert perception.repulsion_rel_sd == pytest.approx(0.2 / 2.1)
-    assert perception.robot_repulsion_gain == pytest.approx(1.0 + 2.0 * 0.2 / 2.1)
-    assert perception.robot_reaction_gain == pytest.approx(1.0)
+    assert perception.robot_repulsion_gain == pytest.approx(1.0 + 6.0 * 0.2 / 2.1)
+    assert perception.robot_reaction_gain == pytest.approx(1.0 + 3.0 * params.perception.reaction_rel_sd)
 
 
-def test_sample_agent_type_without_argument_uses_the_type_awareness() -> None:
+def test_sample_agent_type_uses_the_type_awareness() -> None:
     adult = load_agent_type_from_file(CONFIG_DIR / "adult.yaml")
     default = sample_agent_type(adult, np.random.default_rng(4))
     assert default.perception.robot_range_offset == 0.0
     distracted = load_agent_type_from_file(CONFIG_DIR / "distracted.yaml")
     shifted = sample_agent_type(distracted, np.random.default_rng(4))
-    assert shifted.perception.robot_range_offset == pytest.approx(-2.0 * 0.4)
+    assert shifted.perception.robot_range_offset == pytest.approx(-0.75 * 0.4)
+
+
+def test_sample_agent_type_takes_the_awareness_from_the_type_file(tmp_path: Path) -> None:
+    path = tmp_path / "wary.yaml"
+    path.write_text("name: wary\nextends: adult\nperception:\n  robot_awareness: scared\n", encoding="utf-8")
+    params = sample_agent_type(load_agent_type_from_file(path), np.random.default_rng(5))
+    assert params.perception.robot_repulsion_gain == pytest.approx(1.0 + 6.0 * params.perception.repulsion_rel_sd)

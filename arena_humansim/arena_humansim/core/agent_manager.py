@@ -55,6 +55,7 @@ from arena_humansim_msgs.srv import (
     UpdateRobot,
 )
 from arena_rclpy_mixins.params import Param, declare
+from arena_rclpy_mixins.Time import TimeNode
 from geometry_msgs.msg import Point32, Vector3
 from geometry_msgs.msg import Pose2D as Pose2DMsg
 from py_trees.common import Status
@@ -62,7 +63,6 @@ from py_trees.trees import BehaviourTree
 from rcl_interfaces.msg import SetParametersResult
 from rclpy.clock import Clock as RclClock
 from rclpy.clock import ClockType
-from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from rosgraph_msgs.msg import Clock
@@ -345,7 +345,7 @@ def _gesture_msg(intent: GestureIntent) -> GestureMsg:
     return g
 
 
-class AgentManager(Node):
+class AgentManager(TimeNode):
     def __init__(self, **node_kwargs: Any) -> None:
         super().__init__("arena_humansim", **node_kwargs)
         self._logger = self.get_logger()
@@ -959,7 +959,7 @@ class AgentManager(Node):
         agents = [self._agents[aid] for aid in self._pool_agent_ids if aid in self._agents]
         self._pool.attach_late(planner, agents)
         self._wall_aware = (*self._wall_aware, planner)
-        segments = self._all_wall_segments()
+        segments = self._walls_of(planner, self._all_wall_segments())
         if segments:
             planner.set_walls(segments)
 
@@ -1618,6 +1618,7 @@ class AgentManager(Node):
             self._cached_intermediate_goals = {}
             for planner, _group in _group_by(subgoal_agents, key=lambda a: a.global_planner):
                 self._cached_intermediate_goals.update(planner.get_cached_goals())
+            self._cached_intermediate_goals.update(self._zones.through)
 
             for aid in self._high_level_cmds:
                 if aid not in needs_subgoal_ids:
@@ -3268,16 +3269,20 @@ class AgentManager(Node):
             segments.extend(obs.wall_segments)
         return segments
 
+    def _walls_of(self, subsystem: WallAware, segments: Segments) -> Segments:
+        """The walls a subsystem takes, for a global planner with the seams of the stairs joined in place."""
+        return [*segments, *self._zones.gates] if isinstance(subsystem, GlobalPlanner) else segments
+
     def _refresh_planners(self):
         """Push current wall segments to local planner, global planner, and collision."""
         segments = self._all_wall_segments()
         for subsystem in self._wall_aware:
-            subsystem.set_walls(segments)
+            subsystem.set_walls(self._walls_of(subsystem, segments))
 
     def _publish_world_geometry(self) -> None:
         msg = WorldGeometryMsg()
         msg.header.frame_id = "map"
-        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.stamp = self._header().stamp
 
         for name, ((sx, sy), (ex, ey)) in self._walls.items():
             msg.wall_names.append(name)  # pyright: ignore[reportAttributeAccessIssue]
@@ -3375,7 +3380,10 @@ class AgentManager(Node):
             )
             for z in request.zones
         ]
+        gates = self._zones.gates
         self._zones.set_zones(zones, [z.open for z in request.zones])
+        if self._zones.gates != gates:
+            self._refresh_planners()
         response.success = True
         response.message = f"Set {len(zones)} teleport zone(s)"
         self._logger.debug(response.message)

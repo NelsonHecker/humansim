@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from arena_humansim.core.agents.loader import load_agent_type_from_file
-from arena_humansim.core.agents.types import AWARENESS_PRESETS, AwarenessMixture, as_awareness_spec, awareness_from_text, sample_agent_type
+from arena_humansim.core.agents.types import AWARENESS_PRESETS, AwarenessMixture, AwarenessShift, as_awareness_spec, awareness_from_text, sample_agent_type
 from arena_humansim.utils.scenario import _structure_manual
 
 CONFIG_DIR = Path(__file__).resolve().parents[2] / "config" / "agent_types"
@@ -58,9 +58,14 @@ def test_mixture_weights_must_sum_above_zero() -> None:
 
 
 def test_shipped_archetypes_resolve_to_their_presets() -> None:
-    for name in ("normal", "interested", "distracted", "scared", "blind", "aggressive"):
+    for name in ("normal", "interested", "scared", "blind", "aggressive"):
         atype = load_agent_type_from_file(CONFIG_DIR / f"{name}.yaml")
         assert atype.perception.robot_awareness == AWARENESS_PRESETS[name], name
+
+
+def test_distracted_archetype_keeps_its_own_small_shifts() -> None:
+    atype = load_agent_type_from_file(CONFIG_DIR / "distracted.yaml")
+    assert atype.perception.robot_awareness == AwarenessShift(detection=-0.75, repulsion=-3.0, reaction=-3.0)
 
 
 def test_scenario_manual_structure_keeps_awareness_values() -> None:

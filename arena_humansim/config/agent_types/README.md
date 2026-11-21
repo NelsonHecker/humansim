@@ -36,12 +36,12 @@ Built-in presets for robot awareness: `blind`, `distracted`, `normal`, `interest
 | Parameter | SFM / HSFM | ORCA | Meaning |
 |---|---|---|---|
 | `robot_awareness` `detection` | robot detection range, pruned in perception | distance cutoff when below `vision_range` | how far the agent sees robots |
-| `robot_awareness` `repulsion` | gain on repulsion strength A against robots | gain on the robot clearance radius | yielding urgency and clearance |
+| `robot_awareness` `repulsion` | gain on repulsion strength A against robots | gain on the robot clearance radius, floored at 0.85 | yielding urgency and clearance |
 | `robot_awareness` `fov` | robot cone, pruned in perception | ignored | asymmetric field of view against robots |
-| `robot_awareness` `reaction` | gain on repulsion range B against robots | ignored | how early the agent starts avoiding robots |
+| `robot_awareness` `reaction` | gain on repulsion range B against robots | gain on velocity obstacle time horizon against robots | how early the agent starts avoiding robots |
 | `robot_awareness` `blind` | no robot perception | no robot perception | robots are invisible to the agent |
 
-> Note: ORCA builds its private neighbor list and solves instantaneous geometric velocity obstacles, so it reads `detection`, `blind` and `repulsion`; `fov` and `reaction` act only through the force planners.
+> Note: ORCA builds its private neighbor list and solves instantaneous geometric velocity obstacles, so it reads `detection`, `blind`, `repulsion` and `reaction`; `fov` acts only through the perception-gated planners.
 
 Local planner (`local_planner_params:`):
 
@@ -63,13 +63,17 @@ Declaring the block at all (even empty) activates the locomotion profile for the
 
 The zero-means-off fields (`footprint_length`, `recovery.*`) take a bare number for `0`, since the dict form's `clip_low` default of `0.01` would lift a `{mean: 0}` to `0.01`.
 
+Device (`device:`, optional): passed through untouched to arena_runtime, which projects the held device on the ground for robot collisions; humansim never reads it. `{kind: cane | rollator | walking_frame | iv_stand, bone: <prop bone of the character>}`, or `model: <object>` for an object held in both hands that the character does not carry, centered under the `pose.hold` grips.
+
 Pose (`pose:`, optional): passed through untouched to the renderer (arena_runtime's human animation), humansim never reads it. Per-state (`walk`, `idle`, `run`) joint profiles keyed to the published gait phase, see the renderer's profile docs. `hold: {l|r: <grip radius m> | {radius, angle, curls, wrap}}` closes each named hand on a prop of that radius (cane, pole, walker handle): the renderer solves the finger curls from the template hand skeleton; `angle` turns the grip in the palm (deg), `curls` (thumb to pinky) gives a character's own curls instead (the retarget's `--hold` reports them), `wrap: true` closes the thumb over the fingers. `while: {<interaction>: <pose section>}` gives the whole profile the agent takes while in that interaction (e.g. `caregiver` pushing a wheelchair, `wheelchair_manual` being pushed).
 
 Interaction class (`interaction_class:`, optional name string): social-force class of the type for the local planners' per-class gain matrices. Unset = `human`, robots are always `robot`, any other word (e.g. `wheelchair`) registers a new class on first sight, see [../../arena_humansim/core/interaction_classes.py](../../arena_humansim/core/interaction_classes.py).
 
 Assets (`assets:`, optional list of ASA tags): tag query that selects the visual model of a source-spawned agent, e.g. `human::mobility::wheelchair`. Passed through to the renderer (the env node), humansim never reads it.
 
-Climbs (`climbs:`, optional list among `stairs` and `escalator`, default both): the teleport zone stair kinds the type is routed over, see the [teleport zones](../../../README.md#stairs) section. A pedestrian whose type does not climb a kind takes a route over cabins and other stairs, or stays on its level when none exists. `wheelchair_manual` climbs `[]`. Any other word rejects the type.
+Climbs (`climbs:`, optional list among `stairs` and `escalator`, default both): the teleport zone stair kinds the type is routed over, see the [teleport zones](../../../README.md#stairs) section. A pedestrian whose type does not climb a kind takes a route over cabins and other stairs, walks round a stair of that kind on its own level, or stays on its side when no way exists. `wheelchair_manual` climbs `[]`. Any other word rejects the type.
+
+Stair effort (`stair_effort:`, a distribution like `desired_velocity`, default mean 1.6, std 0.5, clipped to 1-3, which are also the clips of a dict that sets none): how many times its walking time a climb on still stairs feels like to a pedestrian of the type, drawn per pedestrian after every other parameter. It decides between still stairs, a running escalator and walking round where a stair joins two floors the pedestrian can also walk between (see the [stairs](../../../README.md#stairs) section): with the default, about two in three of the pedestrians reaching still stairs and an escalator of the same length from the same spot ride the escalator.
 
 Module selection (name strings, not distributions):
 
@@ -336,12 +340,12 @@ For a `dynamic:` scenario entry, `ArenaHumanDynamicObstacle.sample_params` (in [
 - `elder` - slower, narrower FOV, longer SFM relaxation. Demonstrates how heterogeneity drops out of a handful of distribution tweaks.
 - `child` - small body (0.18 m), wide speed spread (0.4-1.8 m/s), 3 m vision, weaker SFM repulsion.
 - `hurried` - fast (desired 1.7 m/s), narrower FOV, shorter SFM relaxation and repulsion range.
-- `distracted` - phone-walker: 2 m vision, 90 degree FOV, longer SFM relaxation. Robot shifts: `detection` -2, `fov` -1, `repulsion` -1, `reaction` -1.
+- `distracted` - phone-walker: 2 m vision, 90 degree FOV, longer SFM relaxation. Robot shifts: `detection` -5, `fov` -8, `repulsion` -3, `reaction` -3. On an adult (180 degree FOV, std 10) the `fov` shift gives 100 degrees. The shipped `distracted.yaml` type already starts at 90 degrees, so it takes no `fov` shift, which would count the narrowing twice. It uses `detection` -0.75, `repulsion` -3 and `reaction` -3 instead.
 - `blind` - pedestrian oblivious to robots (`robot_awareness: blind`). Human-human social navigation remains 100% active.
 - `normal` - standard adult pedestrian with no robot shift (`robot_awareness: normal`).
-- `interested` - curious pedestrian watching or approaching the robot. Robot shift: `repulsion` -1.
-- `aggressive` - assertive pedestrian who cuts across. Robot shifts: `fov` -1, `repulsion` -2, `reaction` +1.
-- `scared` - cautious pedestrian who keeps a wide clearance from robots. Robot shifts: `fov` +1, `repulsion` +2.
+- `interested` - curious pedestrian watching or approaching the robot. Robot shifts: `repulsion` -3, `reaction` -1.5.
+- `aggressive` - assertive pedestrian who cuts across. Robot shifts: `fov` -1, `repulsion` -4, `reaction` -2.
+- `scared` - cautious pedestrian who keeps a wide clearance from robots. Robot shifts: `fov` +2, `repulsion` +6, `reaction` +3.
 - `sidewalk_obstructing`, `sidewalk_conversing`, `sidewalk_queueing`, `sidewalk_frontal`, `sidewalk_lateral`, `sidewalk_overtaking`, `sidewalk_crossing`, `sidewalk_gesturing` - the eight SidewalkBench pedestrian behaviors, each `extends: adult` in `behavior_tree` mode. A type idles in sequence `idle` on a robot step until its trigger holds, runs the behavior, then parks in `done`.
 
 | Type | Trigger | Behavior |

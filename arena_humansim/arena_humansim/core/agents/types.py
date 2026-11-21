@@ -131,11 +131,11 @@ _SHIFT_FIELDS: tuple[str, ...] = ("detection", "fov", "repulsion", "reaction", "
 
 AWARENESS_PRESETS: dict[str, AwarenessShift] = {
     "blind": AwarenessShift(blind=True),
-    "distracted": AwarenessShift(detection=-2.0, fov=-1.0, repulsion=-1.0, reaction=-1.0),
+    "distracted": AwarenessShift(detection=-5.0, fov=-8.0, repulsion=-3.0, reaction=-3.0),
     "normal": AwarenessShift(),
-    "interested": AwarenessShift(repulsion=-1.0),
-    "aggressive": AwarenessShift(fov=-1.0, repulsion=-2.0, reaction=1.0),
-    "scared": AwarenessShift(fov=1.0, repulsion=2.0),
+    "interested": AwarenessShift(repulsion=-3.0, reaction=-1.5),
+    "aggressive": AwarenessShift(fov=-1.0, repulsion=-4.0, reaction=-2.0),
+    "scared": AwarenessShift(fov=2.0, repulsion=6.0, reaction=3.0),
 }
 
 
@@ -229,6 +229,12 @@ def with_robot_awareness(perception: "SampledPerception", draw: AwarenessDraw) -
         robot_reaction_gain=max(0.05, 1.0 + draw.reaction * perception.reaction_rel_sd),
         robot_blind=draw.blind,
     )
+
+
+def _as_effort_dist(val: "ParamDist | float | Mapping[str, float]") -> "ParamDist":
+    if isinstance(val, dict):
+        return ParamDist(**{"clip_low": 1.0, "clip_high": 3.0, **val})
+    return _as_paramdist(val)
 
 
 @attrs.frozen
@@ -544,6 +550,7 @@ class AgentType:
     interaction_class: str = ""
     assets: tuple[str, ...] = ()
     climbs: tuple[str, ...] = attrs.field(default=STAIRS_KINDS, converter=tuple, validator=attrs.validators.deep_iterable(attrs.validators.in_(STAIRS_KINDS)))
+    stair_effort: ParamDist = attrs.field(default=ParamDist(1.6, 0.5, clip_low=1.0, clip_high=3.0), converter=_as_effort_dist)
 
     perception_stack: tuple[str, ...] = ("default",)
     local_planner: str | None = None
@@ -558,6 +565,7 @@ class AgentType:
     tunes: tuple[ConditionalTune, ...] = ()
     vars: dict[str, VarDef] = attrs.Factory(dict)
     extends: str | None = None
+    device: dict = attrs.Factory(dict)
 
     source_path: Path | None = attrs.field(default=None, eq=False, hash=False, repr=False)
 
@@ -622,6 +630,7 @@ class SampledParams:
     locomotion: SampledLocomotion = attrs.Factory(SampledLocomotion)
     interaction_class: str = ""
     climbs: tuple[str, ...] = STAIRS_KINDS
+    stair_effort: float = 1.0
 
     perception_stack: tuple[str, ...] = ("default",)
     local_planner: str | None = None
@@ -731,6 +740,7 @@ def sample_agent_type(
     idle_gaze_rate_hz = _sample_dist(agent_type.idle_gaze_rate, rng)
     handedness = _sample_handedness(agent_type.handedness, rng)
     locomotion = _sample_locomotion(agent_type, rng)
+    stair_effort = _sample_dist(agent_type.stair_effort, rng)
 
     return SampledParams(
         name=agent_type.name,
@@ -748,6 +758,7 @@ def sample_agent_type(
         locomotion=locomotion,
         interaction_class=agent_type.interaction_class,
         climbs=agent_type.climbs,
+        stair_effort=stair_effort,
         perception_stack=agent_type.perception_stack,
         local_planner=agent_type.local_planner,
         global_planner=agent_type.global_planner,

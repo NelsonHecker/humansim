@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+import pytest
 from arena_humansim.core.agents.base import BaseAgent
 from arena_humansim.core.pool import KIND_HUMAN, KIND_ROBOT, AgentPool
 from arena_humansim.local_planner.orca import ORCAPlanner
@@ -129,3 +130,45 @@ def test_orca_robot_repulsion_gain_widens_the_clearance_around_the_robot(
         return float(pool.vel[0, 0])
 
     assert speed_toward_goal(2.0) < speed_toward_goal(1.0)
+
+
+def test_orca_robot_reaction_gain_slows_down_earlier_for_higher_reaction_gain(
+    pool_empty: Callable[..., AgentPool],
+    agent_factory: Callable[..., BaseAgent],
+) -> None:
+    def speed_toward_goal(reaction_gain: float) -> float:
+        pool = pool_empty(capacity=8)
+        planner = ORCAPlanner()
+        pool.add_agent(agent_factory(agent_id=1, x=0.0, y=0.0))
+        pool.kind[0] = KIND_HUMAN
+        pool.robot_reaction_gain[0] = reaction_gain
+        pool.desired_vel[0] = 1.0
+        pool.add_agent(agent_factory(agent_id=2, x=3.0, y=0.0))
+        pool.kind[1] = KIND_ROBOT
+        pool.desired_vel[1] = 0.0
+        pool.set_goals({1: Pose2D(x=5.0, y=0.0), 2: Pose2D(x=3.0, y=0.0)})
+        planner.compute_pool(pool, dt=0.1)
+        return float(pool.vel[0, 0])
+
+    assert speed_toward_goal(2.0) < speed_toward_goal(1.0)
+
+
+def test_orca_robot_repulsion_gain_is_floored_at_085_of_the_robot_radius(
+    pool_empty: Callable[..., AgentPool],
+    agent_factory: Callable[..., BaseAgent],
+) -> None:
+    def speed_toward_goal(gain: float) -> float:
+        pool = pool_empty(capacity=8)
+        planner = ORCAPlanner()
+        pool.add_agent(agent_factory(agent_id=1, x=0.0, y=0.0))
+        pool.kind[0] = KIND_HUMAN
+        pool.robot_repulsion_gain[0] = gain
+        pool.desired_vel[0] = 1.0
+        pool.add_agent(agent_factory(agent_id=2, x=1.0, y=0.0))
+        pool.kind[1] = KIND_ROBOT
+        pool.desired_vel[1] = 0.0
+        pool.set_goals({1: Pose2D(x=5.0, y=0.0), 2: Pose2D(x=1.0, y=0.0)})
+        planner.compute_pool(pool, dt=0.1)
+        return float(pool.vel[0, 0])
+
+    assert speed_toward_goal(0.0) == pytest.approx(speed_toward_goal(0.85))
