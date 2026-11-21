@@ -450,7 +450,7 @@ def _offset_grid(
     lateral = np.abs((ends[None, :, 0] - x[:, None]) * nx[:, None] + (ends[None, :, 1] - y[:, None]) * ny[:, None])
     reach = max(float(lateral.max()) + wall_radius, separation + chord)
     count = math.ceil(reach / chord)
-    return np.arange(-count, count + 1) * chord
+    return np.arange(-count, count + 1, dtype=np.float64) * chord
 
 
 def _wall_blocked_grid(
@@ -521,7 +521,7 @@ def _widest_hallway(free: NDArray[np.bool_], offsets: NDArray[np.float64]) -> fl
 def _free_edges(free: NDArray[np.bool_], offsets: NDArray[np.float64]) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.bool_]]:
     low = np.empty(free.shape[0])
     high = np.empty(free.shape[0])
-    any_free = free.any(axis=1)
+    any_free = np.asarray(free.any(axis=1), dtype=np.bool_)
     for index, row in enumerate(free):
         runs = _free_runs(row, offsets)
         if not runs:
