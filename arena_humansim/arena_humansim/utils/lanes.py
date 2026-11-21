@@ -527,7 +527,17 @@ def _free_edges(free: NDArray[np.bool_], offsets: NDArray[np.float64]) -> tuple[
         if not runs:
             continue
         main = _run_containing(runs, 0.0)
-        low[index], high[index] = main if main is not None else (runs[0][0], runs[-1][1])
+        if main is None:
+            low[index], high[index] = runs[0][0], runs[-1][1]
+            continue
+        start = runs.index(main)
+        lo_idx = 0
+        while lo_idx < start and runs[lo_idx][1] - runs[lo_idx][0] < 2.0:
+            lo_idx += 1
+        hi_idx = len(runs) - 1
+        while hi_idx > start and runs[hi_idx][1] - runs[hi_idx][0] < 2.0:
+            hi_idx -= 1
+        low[index], high[index] = runs[lo_idx][0], runs[hi_idx][1]
     return low, high, any_free
 
 
