@@ -519,9 +519,16 @@ def _widest_hallway(free: NDArray[np.bool_], offsets: NDArray[np.float64]) -> fl
 
 
 def _free_edges(free: NDArray[np.bool_], offsets: NDArray[np.float64]) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.bool_]]:
-    first = np.argmax(free, axis=1)
-    last = free.shape[1] - 1 - np.argmax(free[:, ::-1], axis=1)
-    return offsets[first], offsets[last], free.any(axis=1)
+    low = np.empty(free.shape[0])
+    high = np.empty(free.shape[0])
+    any_free = free.any(axis=1)
+    for index, row in enumerate(free):
+        runs = _free_runs(row, offsets)
+        if not runs:
+            continue
+        main = _run_containing(runs, 0.0)
+        low[index], high[index] = main if main is not None else (runs[0][0], runs[-1][1])
+    return low, high, any_free
 
 
 def _station_runs(

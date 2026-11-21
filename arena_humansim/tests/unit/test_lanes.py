@@ -147,6 +147,15 @@ def test_two_way_lanes_split_the_space_about_the_moved_centre() -> None:
     assert float(left.centre[at_column] - left.half_width[at_column]) == pytest.approx(-0.25, abs=0.06)
 
 
+def test_two_way_lanes_split_the_space_when_a_pillar_leaves_room_behind_it() -> None:
+    walls = corridor(6.0, 20.0) + [((10.0, 1.4), (10.0, 1.6))]
+    right = lane_of(LaneConfig(centrelines=straight(20.0), side=LaneSide.RIGHT, two_way=True), walls)
+    left = lane_of(LaneConfig(centrelines=straight(20.0), side=LaneSide.LEFT, two_way=True), walls)
+    at_column = int(np.argmin(np.abs(right.s - 10.0)))
+    assert float(right.half_width[at_column]) == pytest.approx(float(left.half_width[at_column]), abs=0.06)
+    assert float(right.centre[at_column] + right.half_width[at_column]) < 0.0
+
+
 def test_centred_colonnade_leaves_each_two_way_lane_its_side() -> None:
     walls = corridor(5.0, 20.0) + [((10.0, -0.3), (10.0, 0.3))]
     right = build_lane(LaneConfig(centrelines=straight(20.0), side=LaneSide.RIGHT, two_way=True), walls, flow="east", agent_radius=0.35, clearance=CLEARANCE, source_extent=1.5)
