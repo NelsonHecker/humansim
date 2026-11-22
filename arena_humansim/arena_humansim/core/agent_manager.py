@@ -3209,6 +3209,7 @@ class AgentManager(TimeNode):
         sink = self._sink_msg_to_config(request.sink)
         self._despawn_monitor.add_sink(sink)
         self._spawn_scheduler.set_sinks(self._despawn_monitor.sinks)
+        self._rebuild_lanes(sink=sink.name)
         response.success = True
         response.message = f"Added sink {sink.name}"
         response.name = sink.name
@@ -3219,10 +3220,12 @@ class AgentManager(TimeNode):
         if not request.name:
             self._despawn_monitor.clear_sinks()
             self._spawn_scheduler.set_sinks({})
+            self._rebuild_lanes()
             response.message = "Removed all sinks"
         else:
             self._despawn_monitor.remove_sink(request.name)
             self._spawn_scheduler.set_sinks(self._despawn_monitor.sinks)
+            self._rebuild_lanes(sink=request.name)
             response.message = f"Removed sink {request.name}"
         response.success = True
         self._logger.debug(response.message)
@@ -3236,12 +3239,14 @@ class AgentManager(TimeNode):
         clearance = resolve_clearance(self._float_param("global_planner.inflation_radius"), self._float_param("global_planner.resolution"))
         return resolve_lane(src, walls, sinks, clearance)
 
-    def _rebuild_lanes(self, changed: Segments | None = None) -> None:
-        """Rebuild the lanes the changed segments can affect (all when None) and suspend the sources whose lane no longer builds."""
+    def _rebuild_lanes(self, changed: Segments | None = None, sink: str | None = None) -> None:
+        """Rebuild the lanes the changed segments can affect or that end in the sink (all when both are None) and suspend the sources whose lane no longer builds."""
         walls = self._all_wall_segments()
         sinks = self._despawn_monitor.sinks
         moved = None if changed is None else segments_array(changed)
         for src in self._lane_sources.values():
+            if sink is not None and src.agent.sink_affinity[0].sink_name != sink:
+                continue
             if src.lane is not None and moved is not None and not lane_affected(src.lane, moved):
                 continue
             try:

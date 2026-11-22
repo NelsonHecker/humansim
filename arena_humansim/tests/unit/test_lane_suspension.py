@@ -92,3 +92,16 @@ def test_wall_added_far_from_the_lane_leaves_the_lane_object_untouched(lane_mana
 def test_wall_added_across_the_lane_suspends_it(lane_manager: AgentManager) -> None:
     add_walls(lane_manager, [PILLAR])
     assert lane_manager._lane_sources["lane"].lane is None
+
+
+def test_removing_the_lane_sink_suspends_the_source_at_once(lane_manager: AgentManager) -> None:
+    lane_manager._remove_sink_callback(RemoveSink.Request(name="end"), RemoveSink.Response())
+    assert lane_manager._lane_sources["lane"].lane is None
+    assert spawned(lane_manager) == 0
+
+
+def test_adding_the_lane_sink_back_resumes_the_source(lane_manager: AgentManager) -> None:
+    lane_manager._remove_sink_callback(RemoveSink.Request(name="end"), RemoveSink.Response())
+    lane_manager._add_sink_callback(AddSink.Request(sink=end_sink_msg()), AddSink.Response())
+    assert lane_manager._lane_sources["lane"].lane is not None
+    assert spawned(lane_manager) > 0
