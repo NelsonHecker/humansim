@@ -54,7 +54,7 @@ def lane_source(*, sinks: tuple[str, ...] = ("end",), side: LaneSide = LaneSide.
             agent_radius=0.25,
             sink_affinity=[SinkAffinity(sink_name=name, weight=1.0) for name in sinks],
         ),
-        lane_config=LaneConfig(centrelines=straight(20.0), side=side),
+        lane_config=LaneConfig(centerlines=straight(20.0), side=side),
     )
 
 
@@ -83,9 +83,9 @@ def test_lane_spawn_track_stays_in_the_band_and_ends_in_the_sink(rng: RNG) -> No
     assert points[-1].x == pytest.approx(20.0)
     assert point_in_polygon(points[-1].x, points[-1].y, END_SINK.shape.vertices)
     for point in points:
-        centre = float(np.interp(point.x, lane.s, lane.centre))
+        center = float(np.interp(point.x, lane.s, lane.center))
         half = float(np.interp(point.x, lane.s, lane.half_width))
-        assert centre - half - 1e-9 <= point.y <= centre + half + 1e-9
+        assert center - half - 1e-9 <= point.y <= center + half + 1e-9
 
 
 def test_lane_flow_with_two_sink_affinities_is_rejected() -> None:

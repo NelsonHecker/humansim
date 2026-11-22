@@ -79,7 +79,7 @@ def derive_track_spacing(vertices: NDArray[np.float64], chord_tolerance: float) 
     return spacing
 
 
-def sigma_metres(lane: Lane) -> float:
+def sigma_meters(lane: Lane) -> float:
     sigma = lane.settings.sigma_q
     return sigma * truncated_sd_factor(sigma) * float(np.median(lane.half_width))
 
@@ -124,17 +124,17 @@ def build_lane(
     right, left = _hallway_edges(swept_free, offsets, stations, flow)
     zone = separation + chord if config.two_way else 0.0
     lows, highs = _station_runs(swept_free, offsets, config, right, left, zone, stations, flow)
-    centre = (lows + highs) / 2.0
+    center = (lows + highs) / 2.0
     if config.offset is not None:
         inside = (lows - GRID_EPS <= config.offset) & (config.offset <= highs + GRID_EPS)
-        centre = np.where(inside, config.offset, centre)
-    half = np.minimum(centre - lows, highs - centre)
-    centre = _window_mean(centre, stations, sweep / 2.0)
+        center = np.where(inside, config.offset, center)
+    half = np.minimum(center - lows, highs - center)
+    center = _window_mean(center, stations, sweep / 2.0)
     half = _window_mean(half, stations, sweep / 2.0)
-    centre, half = _clip(centre, half, lows, highs)
+    center, half = _clip(center, half, lows, highs)
 
-    centre, half, merge_lengths = _blend_junctions(config, centre, half, stations, vertex_s, seg_len, junctions, flow)
-    centre, half = _clip(centre, half, lows, highs)
+    center, half, merge_lengths = _blend_junctions(config, center, half, stations, vertex_s, seg_len, junctions, flow)
+    center, half = _clip(center, half, lows, highs)
 
     settings = LaneSettings(
         two_way=config.two_way,
@@ -157,7 +157,7 @@ def build_lane(
         y=y,
         nx=nx,
         ny=ny,
-        centre=centre,
+        center=center,
         half_width=half,
         vertex_s=vertex_s,
         vertex_x=vertices[:, 0],
@@ -181,8 +181,8 @@ def goal_corners(lane: Lane, others: Sequence[Lane] | None = None) -> NDArray[np
             continue
         turn = math.copysign(1.0, cross)
         s_vertex = float(lane.vertex_s[k])
-        centre = float(np.interp(s_vertex, lane.s, lane.centre))
-        if centre * turn >= 0.0:
+        center = float(np.interp(s_vertex, lane.s, lane.center))
+        if center * turn >= 0.0:
             continue
         if others is None or any(_band_enters_turn(lane, k, other) for other in others if other is not lane):
             found.append(s_vertex)
@@ -212,9 +212,9 @@ def _corner_reach(lane: Lane, k: int) -> float:
     denominator = 1.0 + n_in[0] * n_out[0] + n_in[1] * n_out[1]
     miter = math.hypot((n_in[0] + n_out[0]) / denominator, (n_in[1] + n_out[1]) / denominator)
     s_vertex = float(lane.vertex_s[k])
-    centre = float(np.interp(s_vertex, lane.s, lane.centre))
+    center = float(np.interp(s_vertex, lane.s, lane.center))
     half = float(np.interp(s_vertex, lane.s, lane.half_width))
-    return max(abs(centre - half), abs(centre + half)) * miter + lane.settings.arrival_radius
+    return max(abs(center - half), abs(center + half)) * miter + lane.settings.arrival_radius
 
 
 def _band_enters_turn(lane: Lane, k: int, other: Lane) -> bool:
@@ -223,7 +223,7 @@ def _band_enters_turn(lane: Lane, k: int, other: Lane) -> bool:
     t_out = _unit_vector(float(lane.vertex_x[k + 1] - lane.vertex_x[k]), float(lane.vertex_y[k + 1] - lane.vertex_y[k]))
     turn = math.copysign(1.0, _vertex_cross(lane, k))
     lateral = np.linspace(-1.0, 1.0, BAND_SAMPLES)
-    offsets = other.centre[:, None] + other.half_width[:, None] * lateral[None, :]
+    offsets = other.center[:, None] + other.half_width[:, None] * lateral[None, :]
     px = (other.x[:, None] + offsets * other.nx[:, None]).ravel() - lane.vertex_x[k]
     py = (other.y[:, None] + offsets * other.ny[:, None]).ravel() - lane.vertex_y[k]
     near = np.hypot(px, py) <= _corner_reach(lane, k)
@@ -239,10 +239,10 @@ def build_track(lane: Lane, q: float, s0: float) -> Track:
     grid = grid[~_within_any(grid, _corner_folds(lane, q))]
     protected = np.unique(np.concatenate([[s0], vertices, [lane.length]]))
     stops = np.unique(np.concatenate([protected, grid]))
-    centre = np.interp(stops, lane.s, lane.centre)
+    center = np.interp(stops, lane.s, lane.center)
     half = np.interp(stops, lane.s, lane.half_width)
     x, y, nx, ny = _frame(lane.vertex_s, np.column_stack([lane.vertex_x, lane.vertex_y]), stops)
-    lateral = centre + q * half
+    lateral = center + q * half
     xy = np.column_stack([x + lateral * nx, y + lateral * ny])
     grid_stop = ~np.isin(stops, protected)
     anchors = xy[~grid_stop]
@@ -271,7 +271,7 @@ def _corner_folds(lane: Lane, q: float) -> list[tuple[float, float]]:
         n_in = (-t_in[1], t_in[0])
         n_out = (-t_out[1], t_out[0])
         s_vertex = float(lane.vertex_s[k])
-        lateral = float(np.interp(s_vertex, lane.s, lane.centre) + q * np.interp(s_vertex, lane.s, lane.half_width))
+        lateral = float(np.interp(s_vertex, lane.s, lane.center) + q * np.interp(s_vertex, lane.s, lane.half_width))
         denominator = max(1.0 + n_in[0] * n_out[0] + n_in[1] * n_out[1], GRID_EPS)
         along_in = lateral * (n_out[0] * t_in[0] + n_out[1] * t_in[1]) / denominator
         along_out = lateral * (n_in[0] * t_out[0] + n_in[1] * t_out[1]) / denominator
@@ -307,7 +307,7 @@ def _spaced_points(xy: NDArray[np.float64], minimum_gap: float) -> NDArray[np.in
 
 
 def check_band(lane: Lane, walls: Segments) -> None:
-    bounds = np.stack([lane.centre - lane.half_width, lane.centre, lane.centre + lane.half_width])
+    bounds = np.stack([lane.center - lane.half_width, lane.center, lane.center + lane.half_width])
     px = lane.x[None, :] + bounds * lane.nx[None, :]
     py = lane.y[None, :] + bounds * lane.ny[None, :]
     distance = _min_wall_distance(np.column_stack([px.ravel(), py.ravel()]), segments_array(walls)).reshape(3, -1)
@@ -376,14 +376,14 @@ def _check_inputs(config: LaneConfig, walls: Segments, flow: str, agent_radius: 
 
 
 def _polyline(config: LaneConfig, flow: str) -> tuple[NDArray[np.float64], list[int]]:
-    if not config.centrelines:
+    if not config.centerlines:
         raise ValueError(f"flow {flow!r}: the lane has no segments")
     vertices: list[tuple[float, float]] = []
     junctions: list[int] = []
-    for index, centreline in enumerate(config.centrelines):
-        if len(centreline) < 2:
+    for index, centerline in enumerate(config.centerlines):
+        if len(centerline) < 2:
             raise ValueError(f"flow {flow!r}: segment {index} needs at least two points")
-        points = [(point.x, point.y) for point in centreline]
+        points = [(point.x, point.y) for point in centerline]
         if vertices:
             gap = math.dist(vertices[-1], points[0])
             if gap > JOIN_TOLERANCE:
@@ -497,10 +497,10 @@ def _hallway_edges(
     stations: NDArray[np.float64],
     flow: str,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
-    """Right and left walls of the hallway at each station: its free space within the widest hallway the centreline runs through."""
+    """Right and left walls of the hallway at each station: its free space within the widest hallway the centerline runs through."""
     widest = _widest_hallway(free, offsets)
     if widest is None:
-        raise ValueError(f"flow {flow!r}: no walkable space on the centreline")
+        raise ValueError(f"flow {flow!r}: no walkable space on the centerline")
     inside = np.abs(offsets) <= widest + GRID_EPS
     low, high, any_free = _free_edges(free & inside[None, :], offsets)
     if not bool(np.all(any_free)):
@@ -509,7 +509,7 @@ def _hallway_edges(
 
 
 def _widest_hallway(free: NDArray[np.bool_], offsets: NDArray[np.float64]) -> float | None:
-    """Half-width of the widest free run that holds the centreline, over the stations where the centreline is free."""
+    """Half-width of the widest free run that holds the centerline, over the stations where the centerline is free."""
     halves = []
     for row in free:
         run = _run_containing(_free_runs(row, offsets), 0.0)
@@ -555,12 +555,12 @@ def _station_runs(
     highs = np.empty(len(stations))
     edges: Run = (float(offsets[0]), float(offsets[-1]))
     for index, station in enumerate(stations):
-        centre = float((right[index] + left[index]) / 2.0)
+        center = float((right[index] + left[index]) / 2.0)
         row = free[index]
         if zone > 0.0:
-            row = row & ~(np.abs(offsets - centre) < zone - GRID_EPS)
+            row = row & ~(np.abs(offsets - center) < zone - GRID_EPS)
         runs = _clipped_runs(_free_runs(row, offsets), float(right[index]), float(left[index]))
-        lows[index], highs[index] = _choose_run(runs, config, centre, edges, float(station), flow)
+        lows[index], highs[index] = _choose_run(runs, config, center, edges, float(station), flow)
     return lows, highs
 
 
@@ -572,8 +572,8 @@ def _free_runs(free_row: NDArray[np.bool_], offsets: NDArray[np.float64]) -> lis
     return [(float(offsets[a]), float(offsets[b])) for a, b in zip(starts, ends, strict=True)]
 
 
-def _choose_run(runs: list[Run], config: LaneConfig, centre: float, edges: Run, station: float, flow: str) -> Run:
-    chosen = _primary_run(runs, config, centre)
+def _choose_run(runs: list[Run], config: LaneConfig, center: float, edges: Run, station: float, flow: str) -> Run:
+    chosen = _primary_run(runs, config, center)
     if chosen is None:
         raise ValueError(f"flow {flow!r}: no walkable space at station {station:.2f} m")
     if chosen[0] <= edges[0] + GRID_EPS or chosen[1] >= edges[1] - GRID_EPS:
@@ -581,7 +581,7 @@ def _choose_run(runs: list[Run], config: LaneConfig, centre: float, edges: Run, 
     return chosen
 
 
-def _primary_run(runs: list[Run], config: LaneConfig, centre: float) -> Run | None:
+def _primary_run(runs: list[Run], config: LaneConfig, center: float) -> Run | None:
     if config.offset is not None:
         inside = [run for run in runs if _contains(run, config.offset)]
         if inside:
@@ -590,10 +590,10 @@ def _primary_run(runs: list[Run], config: LaneConfig, centre: float) -> Run | No
             return _nearest_within(runs, 0.0, math.inf, config.offset)
         return _nearest_within(runs, -math.inf, 0.0, config.offset)
     if config.side is LaneSide.RIGHT:
-        return _nearest_within(runs, -math.inf, centre, centre)
+        return _nearest_within(runs, -math.inf, center, center)
     if config.side is LaneSide.LEFT:
-        return _nearest_within(runs, centre, math.inf, centre)
-    return _nearest_within(runs, -math.inf, math.inf, centre)
+        return _nearest_within(runs, center, math.inf, center)
+    return _nearest_within(runs, -math.inf, math.inf, center)
 
 
 def _nearest_within(runs: list[Run], low: float, high: float, anchor: float) -> Run | None:
@@ -625,13 +625,13 @@ def _distance(run: Run, anchor: float) -> float:
 
 
 def _clip(
-    centre: NDArray[np.float64],
+    center: NDArray[np.float64],
     half: NDArray[np.float64],
     lows: NDArray[np.float64],
     highs: NDArray[np.float64],
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
-    lo = np.maximum(centre - half, lows)
-    hi = np.minimum(centre + half, highs)
+    lo = np.maximum(center - half, lows)
+    hi = np.minimum(center + half, highs)
     empty = hi < lo
     lo = np.where(empty, lows, lo)
     hi = np.where(empty, highs, hi)
@@ -640,7 +640,7 @@ def _clip(
 
 def _blend_junctions(
     config: LaneConfig,
-    centre: NDArray[np.float64],
+    center: NDArray[np.float64],
     half: NDArray[np.float64],
     stations: NDArray[np.float64],
     vertex_s: NDArray[np.float64],
@@ -667,22 +667,22 @@ def _blend_junctions(
         start = junction_s - length
         window = (stations >= start - GRID_EPS) & (stations <= junction_s + GRID_EPS)
         frac = np.clip((stations[window] - start) / length, 0.0, 1.0)
-        c_start = float(np.interp(start, stations, centre))
+        c_start = float(np.interp(start, stations, center))
         h_start = float(np.interp(start, stations, half))
-        centre[window] = c_start + (centre[station] - c_start) * frac
+        center[window] = c_start + (center[station] - c_start) * frac
         half[window] = h_start + (half[station] - h_start) * frac
-    return centre, half, derived
+    return center, half, derived
 
 
 def _band_edges(lane: Lane, index: int) -> list[tuple[float, float]]:
-    offsets = (lane.centre[index] - lane.half_width[index], lane.centre[index], lane.centre[index] + lane.half_width[index])
+    offsets = (lane.center[index] - lane.half_width[index], lane.center[index], lane.center[index] + lane.half_width[index])
     return [(float(lane.x[index] + o * lane.nx[index]), float(lane.y[index] + o * lane.ny[index])) for o in offsets]
 
 
 def _first_tangent(config: LaneConfig, flow: str) -> tuple[float, float]:
-    if not config.centrelines or len(config.centrelines[0]) < 2:
+    if not config.centerlines or len(config.centerlines[0]) < 2:
         raise ValueError(f"flow {flow!r}: the first segment needs two points")
-    first, second = config.centrelines[0][0], config.centrelines[0][1]
+    first, second = config.centerlines[0][0], config.centerlines[0][1]
     dx, dy = second.x - first.x, second.y - first.y
     length = math.hypot(dx, dy)
     if length <= GRID_EPS:

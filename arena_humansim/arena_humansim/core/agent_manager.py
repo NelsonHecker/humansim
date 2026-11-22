@@ -117,7 +117,7 @@ from arena_humansim.perception import Perception
 from arena_humansim.utils import RNG
 from arena_humansim.utils.event_bus import EventBus
 from arena_humansim.utils.geometry import box_wall_segments
-from arena_humansim.utils.lanes import resolve_clearance, resolve_lane, sigma_metres
+from arena_humansim.utils.lanes import resolve_clearance, resolve_lane, sigma_meters
 from arena_humansim.utils.loggable import Loggable
 from arena_humansim.utils.scenario import EventScript, InteractionScript, ScenarioConfig
 from arena_humansim.utils.types import (
@@ -3081,14 +3081,14 @@ class AgentManager(TimeNode):
         if not lane.segments:
             return None
         if not lane.side:
-            raise ValueError(f"source {src_msg.name!r}: a lane needs a side (right, left or centre)")
+            raise ValueError(f"source {src_msg.name!r}: a lane needs a side (right, left or center)")
         try:
             side = LaneSide(lane.side)
         except ValueError:
             raise ValueError(f"source {src_msg.name!r}: unknown lane side {lane.side!r}") from None
-        defaults = LaneConfig(centrelines=[], side=side)
+        defaults = LaneConfig(centerlines=[], side=side)
         return LaneConfig(
-            centrelines=[[Pose2D(x=point.x, y=point.y, theta=0.0) for point in segment.centreline] for segment in lane.segments],
+            centerlines=[[Pose2D(x=point.x, y=point.y, theta=0.0) for point in segment.centerline] for segment in lane.segments],
             side=side,
             two_way=lane.two_way,
             offset=lane.offset if lane.has_offset else None,
@@ -3182,7 +3182,7 @@ class AgentManager(TimeNode):
             response.track_spacing = src.lane.settings.track_spacing
             response.arrival_radius = src.lane.settings.arrival_radius
             response.spawn_length = src.lane.settings.spawn_length
-            response.sigma_m = sigma_metres(src.lane)
+            response.sigma_m = sigma_meters(src.lane)
         response.success = True
         response.message = f"Added source {src.name}"
         response.name = src.name

@@ -115,10 +115,10 @@ Every interaction follows a single flow: a BT `SeekNode` emits a SEEK command, I
 
 ### Pedestrian lanes
 
-A source with a `lane` block walks a centreline instead of aiming at the sink. Each walker gets its own track: the centreline offset by a truncated-normal fraction `q` of the band that the free space allows.
+A source with a `lane` block walks a centerline instead of aiming at the sink. Each walker gets its own track: the centerline offset by a truncated-normal fraction `q` of the band that the free space allows.
 
-- `side` is required: `right`, `left` or `centre`. There is no default.
-- `offset` (metres, positive to the left of travel) is optional. When given, the band centres on it, bounded by the walls. The message carries `has_offset`, so `0` is a valid offset. Without an offset, the band centres on the free space on `side`.
+- `side` is required: `right`, `left` or `center`. There is no default.
+- `offset` (meters, positive to the left of travel) is optional. When given, the band centers on it, bounded by the walls. The message carries `has_offset`, so `0` is a valid offset. Without an offset, the band centers on the free space on `side`.
 - Every other setting is `0` in the message for derived. `track_spacing` comes from `chord_tolerance` and is capped at 3 m. `arrival_radius` is a third of the spacing. `spawn_length` is the source extent along the lane minus the arrival radius. `sweep_length` defaults to the spacing. `merge_length` comes from the band at each junction.
 - `sigma_q` (default 0.5) and `chord_tolerance` (default 0.05 m) set the spread and the track.
 - A lane flow needs exactly one sink affinity. Its end band must lie in that sink: inside the polygon, or within `absorption_radius` of a circle sink.

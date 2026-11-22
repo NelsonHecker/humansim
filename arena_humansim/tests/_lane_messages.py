@@ -8,7 +8,7 @@ from geometry_msgs.msg import Point32
 from geometry_msgs.msg import Pose2D as Pose2DMsg
 
 CORRIDOR_WALLS = [("north", (0.0, 2.0), (20.0, 2.0)), ("south", (0.0, -2.0), (20.0, -2.0))]
-DEFAULT_CENTRELINE = [(0.0, 0.0), (20.0, 0.0)]
+DEFAULT_CENTERLINE = [(0.0, 0.0), (20.0, 0.0)]
 
 
 def walls_request(walls: Sequence[tuple[str, tuple[float, float], tuple[float, float]]]) -> AddWalls.Request:
@@ -34,7 +34,7 @@ def lane_source_msg(
     name: str,
     *,
     side: str = "right",
-    segments: Sequence[Sequence[tuple[float, float]]] = (DEFAULT_CENTRELINE,),
+    segments: Sequence[Sequence[tuple[float, float]]] = (DEFAULT_CENTERLINE,),
     sink: str = "end",
 ) -> SourceConfig:
     source = SourceConfig()
@@ -61,9 +61,9 @@ def lane_source_msg(
 def _lane(side: str, segments: Sequence[Sequence[tuple[float, float]]]) -> LaneConfig:
     lane = LaneConfig()
     lane.side = side
-    for centreline in segments:
+    for centerline in segments:
         segment = LaneSegment()
-        segment.centreline = [Pose2DMsg(x=float(x), y=float(y), theta=0.0) for x, y in centreline]
+        segment.centerline = [Pose2DMsg(x=float(x), y=float(y), theta=0.0) for x, y in centerline]
         lane.segments.append(segment)
     return lane
 

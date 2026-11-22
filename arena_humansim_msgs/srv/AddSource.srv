@@ -6,4 +6,4 @@ string name
 float64 track_spacing    # derived, 0 without a lane
 float64 arrival_radius   # derived, 0 without a lane
 float64 spawn_length     # derived, 0 without a lane
-float64 sigma_m          # median sd of q in metres, 0 without a lane
+float64 sigma_m          # median sd of q in meters, 0 without a lane

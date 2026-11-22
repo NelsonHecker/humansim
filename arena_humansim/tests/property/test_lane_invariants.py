@@ -21,7 +21,7 @@ CLEARANCE = resolve_clearance(0.38, 0.2)
 )
 def test_every_waypoint_stays_outside_every_wall_clearance(pillar_x: float, pillar_y: float, offset: float, q: float, s0: float) -> None:
     walls = corridor(4.0, 20.0) + [((pillar_x, pillar_y - 0.3), (pillar_x, pillar_y + 0.3))]
-    config = LaneConfig(centrelines=straight(20.0), side=LaneSide.RIGHT, offset=offset)
+    config = LaneConfig(centerlines=straight(20.0), side=LaneSide.RIGHT, offset=offset)
     lane = build_lane(config, walls, flow="prop", agent_radius=0.25, clearance=CLEARANCE, source_extent=1.5)
     track = build_track(lane, q=q, s0=s0)
     points = np.array([[p.x, p.y] for p in track.points])

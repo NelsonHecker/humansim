@@ -321,12 +321,12 @@ class AgentTemplate:
 class LaneSide(enum.StrEnum):
     RIGHT = "right"
     LEFT = "left"
-    CENTRE = "centre"
+    CENTER = "center"
 
 
 @attrs.define
 class LaneConfig:
-    centrelines: list[list[Pose2D]]
+    centerlines: list[list[Pose2D]]
     side: LaneSide
     two_way: bool = False
     offset: float | None = None
@@ -363,7 +363,7 @@ class Lane:
     y: NDArray[np.float64]
     nx: NDArray[np.float64]
     ny: NDArray[np.float64]
-    centre: NDArray[np.float64]
+    center: NDArray[np.float64]
     half_width: NDArray[np.float64]
     vertex_s: NDArray[np.float64]
     vertex_x: NDArray[np.float64]
