@@ -32,6 +32,7 @@ VERTEX_EPS = 1e-9
 WALL_DISTANCE_CHUNK = 4096
 BAND_SAMPLES = 41
 DEFAULT_AGENT_RADIUS = 0.35
+MIN_ADJACENT_RUN_WIDTH = 2.0
 
 Run = tuple[float, float]
 
@@ -532,10 +533,10 @@ def _free_edges(free: NDArray[np.bool_], offsets: NDArray[np.float64]) -> tuple[
             continue
         start = runs.index(main)
         lo_idx = 0
-        while lo_idx < start and runs[lo_idx][1] - runs[lo_idx][0] < 2.0:
+        while lo_idx < start and runs[lo_idx][1] - runs[lo_idx][0] < MIN_ADJACENT_RUN_WIDTH:
             lo_idx += 1
         hi_idx = len(runs) - 1
-        while hi_idx > start and runs[hi_idx][1] - runs[hi_idx][0] < 2.0:
+        while hi_idx > start and runs[hi_idx][1] - runs[hi_idx][0] < MIN_ADJACENT_RUN_WIDTH:
             hi_idx -= 1
         low[index], high[index] = runs[lo_idx][0], runs[hi_idx][1]
     return low, high, any_free

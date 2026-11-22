@@ -179,6 +179,36 @@ def test_opening_in_one_wall_does_not_move_the_hallway_center() -> None:
     assert float(lane.center[at_opening] + lane.half_width[at_opening]) == pytest.approx(0.0, abs=0.06)
 
 
+@pytest.mark.parametrize("side", [LaneSide.RIGHT, LaneSide.LEFT])
+def test_room_behind_a_solid_wall_does_not_widen_the_hallway(side: LaneSide) -> None:
+    walls = [
+        ((0.0, -2.0), (20.0, -2.0)),
+        ((0.0, 2.0), (20.0, 2.0)),
+        ((0.0, 8.3), (20.0, 8.3)),
+        ((0.0, 2.0), (0.0, 8.3)),
+        ((20.0, 2.0), (20.0, 8.3)),
+    ]
+    lane = lane_of(LaneConfig(centerlines=straight(20.0), side=side), walls)
+    assert float(np.max(lane.center + lane.half_width)) <= 2.0
+    assert float(np.min(lane.center - lane.half_width)) >= -2.0
+
+
+@pytest.mark.parametrize("side", [LaneSide.RIGHT, LaneSide.LEFT])
+def test_door_in_the_wall_to_a_room_keeps_the_band_in_the_corridor_away_from_the_door(side: LaneSide) -> None:
+    walls = [
+        ((0.0, -2.0), (20.0, -2.0)),
+        ((0.0, 2.0), (1.0, 2.0)),
+        ((2.0, 2.0), (20.0, 2.0)),
+        ((0.0, 8.3), (20.0, 8.3)),
+        ((0.0, 2.0), (0.0, 8.3)),
+        ((20.0, 2.0), (20.0, 8.3)),
+    ]
+    lane = lane_of(LaneConfig(centerlines=straight(20.0), side=side), walls)
+    far = lane.s > 12.0
+    assert float(np.max((lane.center + lane.half_width)[far])) <= 2.0
+    assert float(np.min((lane.center - lane.half_width)[far])) >= -2.0
+
+
 def test_disconnected_segments_raise_naming_the_flow() -> None:
     config = LaneConfig(
         centerlines=[
