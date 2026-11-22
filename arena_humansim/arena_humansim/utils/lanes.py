@@ -272,10 +272,7 @@ def _unit_vector(dx: float, dy: float) -> tuple[float, float]:
 
 
 def _corner_folds(lane: Lane, q: float) -> list[tuple[float, float]]:
-    """Arc intervals beside each corner where the offset folds back on itself; grid goals inside them are dropped.
-
-    On the inside of a turn the offset legs meet at the miter point. A goal on a leg beyond that point would lie behind it.
-    """
+    """Arc intervals beside each corner where the offset track folds back on itself."""
     folds: list[tuple[float, float]] = []
     vx, vy = lane.vertex_x, lane.vertex_y
     for k in range(1, len(vx) - 1):
@@ -303,11 +300,7 @@ def _within_any(values: NDArray[np.float64], intervals: list[tuple[float, float]
 
 
 def _spaced_points(xy: NDArray[np.float64], minimum_gap: float) -> NDArray[np.intp]:
-    """Indices of the track points kept, so that no two goals lie closer than minimum_gap in the plane.
-
-    The first point (the spawn) is always kept. Points that fold onto each other next to a corner, where the lateral offset
-    bends the track, keep only the first of them. A last point that lies too close replaces the points before it.
-    """
+    """Indices of the kept track points, the first and last always kept and no two closer than minimum_gap."""
     kept = [0]
     for index in range(1, len(xy) - 1):
         if float(np.hypot(*(xy[index] - xy[kept[-1]]))) >= minimum_gap:
