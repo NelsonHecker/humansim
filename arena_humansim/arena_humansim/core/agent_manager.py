@@ -117,7 +117,7 @@ from arena_humansim.perception import Perception
 from arena_humansim.utils import RNG
 from arena_humansim.utils.event_bus import EventBus
 from arena_humansim.utils.geometry import box_wall_segments
-from arena_humansim.utils.lanes import resolve_clearance, resolve_lane, sigma_meters
+from arena_humansim.utils.lanes import resolve_clearance, resolve_lane, sigma_meters, with_goal_corners
 from arena_humansim.utils.loggable import Loggable
 from arena_humansim.utils.scenario import EventScript, InteractionScript, ScenarioConfig
 from arena_humansim.utils.types import (
@@ -3132,6 +3132,7 @@ class AgentManager(TimeNode):
             self._spawn_scheduler.add_source(src)
             if src.lane_config is not None:
                 self._lane_sources[src.name] = src
+        self._narrow_goal_corners()
 
         for sink in sinks.values():
             self._despawn_monitor.add_sink(sink)
@@ -3178,6 +3179,7 @@ class AgentManager(TimeNode):
             return response
         if src.lane_config is not None:
             self._lane_sources[src.name] = src
+        self._narrow_goal_corners()
         if src.lane is not None:
             response.track_spacing = src.lane.settings.track_spacing
             response.arrival_radius = src.lane.settings.arrival_radius
@@ -3198,6 +3200,7 @@ class AgentManager(TimeNode):
             self._spawn_scheduler.remove_source(request.name)
             self._lane_sources.pop(request.name, None)
             response.message = f"Removed source {request.name}"
+        self._narrow_goal_corners()
         response.success = True
         self._logger.debug(response.message)
         return response
@@ -3248,6 +3251,14 @@ class AgentManager(TimeNode):
             if src.lane is None:
                 self._logger.info(f"source {src.name!r} resumed")
             src.lane = lane
+        self._narrow_goal_corners()
+
+    def _narrow_goal_corners(self) -> None:
+        """Limit each built lane's goal corners to the corners where another built lane is inside the turn."""
+        built = {name: src.lane for name, src in self._lane_sources.items() if src.lane is not None}
+        for name, lane in built.items():
+            others = [other for other_name, other in built.items() if other_name != name]
+            self._lane_sources[name].lane = with_goal_corners(lane, others)
 
     def _all_wall_segments(self) -> Segments:
         """Collect wall segments from both explicit walls and obstacle bounding boxes."""
