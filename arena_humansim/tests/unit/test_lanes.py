@@ -521,3 +521,27 @@ def test_offset_grid_of_a_corridor_in_a_larger_world_stays_near_the_corridor_wid
     lane = lane_of(config, corridor(4.0, 20.0) + far_walls())
     assert 2.0 <= lane.grid_reach < 3.0
 
+
+def _hall_then_corridor_with_room() -> Segments:
+    return [
+        ((-3.0, -5.0), (10.0, -5.0)),
+        ((-3.0, 5.0), (10.0, 5.0)),
+        ((-3.0, -5.0), (-3.0, 5.0)),
+        ((10.0, -5.0), (10.0, -2.0)),
+        ((10.0, 2.0), (10.0, 5.0)),
+        ((10.0, -2.0), (30.0, -2.0)),
+        ((10.0, 2.0), (30.0, 2.0)),
+        ((10.0, 8.3), (30.0, 8.3)),
+        ((10.0, 2.0), (10.0, 8.3)),
+        ((30.0, -2.0), (30.0, 8.3)),
+    ]
+
+
+@pytest.mark.parametrize("side", [LaneSide.RIGHT, LaneSide.LEFT])
+def test_room_behind_a_corridor_wall_after_a_wide_hall_leaves_both_bands_their_width(side: LaneSide) -> None:
+    config = LaneConfig(centerlines=straight(27.0), side=side, two_way=True)
+    lane = lane_of(config, _hall_then_corridor_with_room())
+    in_corridor = lane.s > 16.0
+    assert float(np.max((lane.center + lane.half_width)[in_corridor])) <= 2.0
+    assert float(np.min((lane.center - lane.half_width)[in_corridor])) >= -2.0
+    assert float(np.min(lane.half_width[in_corridor])) > 0.6
