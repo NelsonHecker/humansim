@@ -59,6 +59,8 @@ class SpawnScheduler(Loggable):
         sim_time_s = tick_count * dt
         requests = []
         for src in self._sources.values():
+            if src.lane_config is not None and src.lane is None:
+                continue
             alive = self._alive_count.get(src.name, 0)
             total = self._total_count.get(src.name, 0)
             if src.type is SourceType.MAX:

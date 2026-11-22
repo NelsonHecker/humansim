@@ -24,13 +24,13 @@ def test_lane_source_is_accepted_with_its_derived_track_spacing(manager_factory:
     assert response.track_spacing == pytest.approx(3.0)
 
 
-def test_wall_change_that_leaves_no_band_is_refused_and_the_walls_stay(manager_factory: Callable[..., AgentManager], minimal_scenario: ScenarioConfig) -> None:
+def test_wall_change_that_leaves_no_band_applies_and_suspends_the_lane(manager_factory: Callable[..., AgentManager], minimal_scenario: ScenarioConfig) -> None:
     manager = _lane_flow(manager_factory, minimal_scenario)
     manager._add_source_callback(AddSource.Request(source=lane_source_msg("lane")), AddSource.Response())
     response = manager._add_walls_callback(walls_request([("pillar", (10.0, -2.0), (10.0, 2.0))]), AddWalls.Response())
-    assert response.success is False
-    assert "flow 'lane'" in response.message
-    assert "pillar" not in manager._walls
+    assert response.success is True
+    assert "pillar" in manager._walls
+    assert manager._lane_sources["lane"].lane is None
 
 
 def test_wall_change_that_keeps_every_band_is_accepted(manager_factory: Callable[..., AgentManager], minimal_scenario: ScenarioConfig) -> None:

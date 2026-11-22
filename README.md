@@ -122,7 +122,7 @@ A source with a `lane` block walks a centerline instead of aiming at the sink. E
 - Every other setting is `0` in the message for derived. `track_spacing` comes from `chord_tolerance` and is capped at 3 m. `arrival_radius` is a third of the spacing. `spawn_length` is the source extent along the lane minus the arrival radius. `sweep_length` defaults to the spacing. `merge_length` comes from the band at each junction.
 - `sigma_q` (default 0.5) and `chord_tolerance` (default 0.05 m) set the spread and the track.
 - A lane flow needs exactly one sink affinity. Its end band must lie in that sink: inside the polygon, or within `absorption_radius` of a circle sink.
-- A wall or obstacle change that leaves any lane without a band is refused, and the walls stay as they were.
+- A wall or obstacle change always applies. A lane source whose lane no longer builds on the new walls stops spawning and resumes once it builds again.
 
 ## Teleport Zones
 

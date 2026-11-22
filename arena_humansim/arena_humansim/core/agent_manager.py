@@ -3233,34 +3233,21 @@ class AgentManager(TimeNode):
         clearance = resolve_clearance(self._float_param("global_planner.inflation_radius"), self._float_param("global_planner.resolution"))
         return resolve_lane(src, walls, sinks, clearance)
 
-    def _rebuild_lanes(self) -> str | None:
-        """Rebuild every lane on the current walls, or return why one no longer builds."""
+    def _rebuild_lanes(self) -> None:
+        """Rebuild every lane on the current walls and suspend the sources whose lane no longer builds."""
         walls = self._all_wall_segments()
         sinks = self._despawn_monitor.sinks
-        rebuilt: list[tuple[SourceConfig, Lane]] = []
         for src in self._lane_sources.values():
             try:
-                rebuilt.append((src, self._build_source_lane(src, walls, sinks)))
+                lane = self._build_source_lane(src, walls, sinks)
             except ValueError as e:
-                return str(e)
-        for src, lane in rebuilt:
+                if src.lane is not None:
+                    self._logger.warning(f"source {src.name!r} suspended: {e}")
+                src.lane = None
+                continue
+            if src.lane is None:
+                self._logger.info(f"source {src.name!r} resumed")
             src.lane = lane
-        return None
-
-    def _refuse_lane_break(
-        self,
-        walls_before: Mapping[str, tuple[tuple[float, float], tuple[float, float]]],
-        obstacles_before: Mapping[str, ObstacleData],
-    ) -> str | None:
-        """Restore the walls and obstacles when a lane no longer builds on them."""
-        refusal = self._rebuild_lanes()
-        if refusal is None:
-            return None
-        self._walls.clear()
-        self._walls.update(walls_before)
-        self._obstacles.clear()
-        self._obstacles.update(obstacles_before)
-        return refusal
 
     def _all_wall_segments(self) -> Segments:
         """Collect wall segments from both explicit walls and obstacle bounding boxes."""
@@ -3320,14 +3307,9 @@ class AgentManager(TimeNode):
         self._world_geometry_pub.publish(msg)
 
     def _add_walls_callback(self, request: AddWalls.Request, response: AddWalls.Response) -> AddWalls.Response:
-        walls_before, obstacles_before = dict(self._walls), dict(self._obstacles)
         for name, start, end in zip(request.names, request.starts, request.ends, strict=True):
             self._walls[name] = ((start.x, start.y), (end.x, end.y))
-        if refusal := self._refuse_lane_break(walls_before, obstacles_before):
-            response.success = False
-            response.message = refusal
-            self._logger.error(refusal)
-            return response
+        self._rebuild_lanes()
         self._refresh_planners()
         self._publish_world_geometry()
         response.success = True
@@ -3336,7 +3318,6 @@ class AgentManager(TimeNode):
         return response
 
     def _remove_walls_callback(self, request: RemoveWalls.Request, response: RemoveWalls.Response) -> RemoveWalls.Response:
-        walls_before, obstacles_before = dict(self._walls), dict(self._obstacles)
         if not request.names:
             self._walls.clear()
             response.message = "Removed all walls"
@@ -3344,11 +3325,7 @@ class AgentManager(TimeNode):
             for name in request.names:
                 self._walls.pop(name, None)
             response.message = f"Removed {len(request.names)} wall(s), remaining {len(self._walls)}"
-        if refusal := self._refuse_lane_break(walls_before, obstacles_before):
-            response.success = False
-            response.message = refusal
-            self._logger.error(refusal)
-            return response
+        self._rebuild_lanes()
         self._refresh_planners()
         self._publish_world_geometry()
         response.success = True
@@ -3419,7 +3396,6 @@ class AgentManager(TimeNode):
         return response
 
     def _add_obstacles_callback(self, request: AddObstacles.Request, response: AddObstacles.Response) -> AddObstacles.Response:
-        walls_before, obstacles_before = dict(self._walls), dict(self._obstacles)
         added = 0
         for obs_msg in request.obstacles:
             if obs_msg.name in self._obstacles:
@@ -3448,11 +3424,7 @@ class AgentManager(TimeNode):
                 wall_segments=tuple(wall_segments),
             )
             added += 1
-        if refusal := self._refuse_lane_break(walls_before, obstacles_before):
-            response.success = False
-            response.message = refusal
-            self._logger.error(refusal)
-            return response
+        self._rebuild_lanes()
         if added:
             self._refresh_planners()
             self._publish_world_geometry()
@@ -3462,7 +3434,6 @@ class AgentManager(TimeNode):
         return response
 
     def _remove_obstacles_callback(self, request: RemoveObstacles.Request, response: RemoveObstacles.Response) -> RemoveObstacles.Response:
-        walls_before, obstacles_before = dict(self._walls), dict(self._obstacles)
         if not request.names:
             self._obstacles.clear()
             response.message = "Removed all obstacles"
@@ -3470,11 +3441,7 @@ class AgentManager(TimeNode):
             for name in request.names:
                 self._obstacles.pop(name, None)
             response.message = f"Removed {len(request.names)} obstacle(s), remaining {len(self._obstacles)}"
-        if refusal := self._refuse_lane_break(walls_before, obstacles_before):
-            response.success = False
-            response.message = refusal
-            self._logger.error(refusal)
-            return response
+        self._rebuild_lanes()
         self._refresh_planners()
         self._publish_world_geometry()
         response.success = True
