@@ -117,7 +117,7 @@ from arena_humansim.perception import Perception
 from arena_humansim.utils import RNG
 from arena_humansim.utils.event_bus import EventBus
 from arena_humansim.utils.geometry import box_wall_segments
-from arena_humansim.utils.lanes import resolve_clearance, resolve_lane, sigma_meters, with_goal_corners
+from arena_humansim.utils.lanes import lane_affected, resolve_clearance, resolve_lane, segments_array, sigma_meters, with_goal_corners
 from arena_humansim.utils.loggable import Loggable
 from arena_humansim.utils.scenario import EventScript, InteractionScript, ScenarioConfig
 from arena_humansim.utils.types import (
@@ -3236,11 +3236,14 @@ class AgentManager(TimeNode):
         clearance = resolve_clearance(self._float_param("global_planner.inflation_radius"), self._float_param("global_planner.resolution"))
         return resolve_lane(src, walls, sinks, clearance)
 
-    def _rebuild_lanes(self) -> None:
-        """Rebuild every lane on the current walls and suspend the sources whose lane no longer builds."""
+    def _rebuild_lanes(self, changed: Segments | None = None) -> None:
+        """Rebuild the lanes the changed segments can affect (all when None) and suspend the sources whose lane no longer builds."""
         walls = self._all_wall_segments()
         sinks = self._despawn_monitor.sinks
+        moved = None if changed is None else segments_array(changed)
         for src in self._lane_sources.values():
+            if src.lane is not None and moved is not None and not lane_affected(src.lane, moved):
+                continue
             try:
                 lane = self._build_source_lane(src, walls, sinks)
             except ValueError as e:
@@ -3318,9 +3321,13 @@ class AgentManager(TimeNode):
         self._world_geometry_pub.publish(msg)
 
     def _add_walls_callback(self, request: AddWalls.Request, response: AddWalls.Response) -> AddWalls.Response:
+        changed: Segments = []
         for name, start, end in zip(request.names, request.starts, request.ends, strict=True):
+            if name in self._walls:
+                changed.append(self._walls[name])
             self._walls[name] = ((start.x, start.y), (end.x, end.y))
-        self._rebuild_lanes()
+            changed.append(self._walls[name])
+        self._rebuild_lanes(changed)
         self._refresh_planners()
         self._publish_world_geometry()
         response.success = True
@@ -3329,14 +3336,14 @@ class AgentManager(TimeNode):
         return response
 
     def _remove_walls_callback(self, request: RemoveWalls.Request, response: RemoveWalls.Response) -> RemoveWalls.Response:
+        changed: Segments | None = None
         if not request.names:
             self._walls.clear()
             response.message = "Removed all walls"
         else:
-            for name in request.names:
-                self._walls.pop(name, None)
+            changed = [wall for name in request.names if (wall := self._walls.pop(name, None)) is not None]
             response.message = f"Removed {len(request.names)} wall(s), remaining {len(self._walls)}"
-        self._rebuild_lanes()
+        self._rebuild_lanes(changed)
         self._refresh_planners()
         self._publish_world_geometry()
         response.success = True
@@ -3408,6 +3415,7 @@ class AgentManager(TimeNode):
 
     def _add_obstacles_callback(self, request: AddObstacles.Request, response: AddObstacles.Response) -> AddObstacles.Response:
         added = 0
+        changed: Segments = []
         for obs_msg in request.obstacles:
             if obs_msg.name in self._obstacles:
                 continue  # noop if already exists
@@ -3435,7 +3443,8 @@ class AgentManager(TimeNode):
                 wall_segments=tuple(wall_segments),
             )
             added += 1
-        self._rebuild_lanes()
+            changed.extend(wall_segments)
+        self._rebuild_lanes(changed)
         if added:
             self._refresh_planners()
             self._publish_world_geometry()
@@ -3445,14 +3454,14 @@ class AgentManager(TimeNode):
         return response
 
     def _remove_obstacles_callback(self, request: RemoveObstacles.Request, response: RemoveObstacles.Response) -> RemoveObstacles.Response:
+        changed: Segments | None = None
         if not request.names:
             self._obstacles.clear()
             response.message = "Removed all obstacles"
         else:
-            for name in request.names:
-                self._obstacles.pop(name, None)
+            changed = [segment for name in request.names if (obs := self._obstacles.pop(name, None)) is not None for segment in obs.wall_segments]
             response.message = f"Removed {len(request.names)} obstacle(s), remaining {len(self._obstacles)}"
-        self._rebuild_lanes()
+        self._rebuild_lanes(changed)
         self._refresh_planners()
         self._publish_world_geometry()
         response.success = True

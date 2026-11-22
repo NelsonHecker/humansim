@@ -502,3 +502,22 @@ def test_truncated_normal_stays_inside_bounds_and_matches_closed_form_sd() -> No
     assert float(draws.min()) >= -1.0
     assert float(draws.max()) <= 1.0
     assert abs(float(draws.std()) - expected_sd) < 0.01
+
+
+def far_walls() -> Segments:
+    return [((-40.0, 60.0), (60.0, 60.0)), ((-40.0, -60.0), (60.0, -60.0)), ((-40.0, -60.0), (-40.0, 60.0)), ((60.0, -60.0), (60.0, 60.0))]
+
+
+def test_corridor_inside_a_much_larger_world_builds_the_same_band() -> None:
+    config = LaneConfig(centerlines=straight(20.0), side=LaneSide.RIGHT)
+    alone = lane_of(config, corridor(4.0, 20.0))
+    enclosed = lane_of(config, corridor(4.0, 20.0) + far_walls())
+    np.testing.assert_allclose(enclosed.center, alone.center)
+    np.testing.assert_allclose(enclosed.half_width, alone.half_width)
+
+
+def test_offset_grid_of_a_corridor_in_a_larger_world_stays_near_the_corridor_width() -> None:
+    config = LaneConfig(centerlines=straight(20.0), side=LaneSide.RIGHT)
+    lane = lane_of(config, corridor(4.0, 20.0) + far_walls())
+    assert 2.0 <= lane.grid_reach < 3.0
+

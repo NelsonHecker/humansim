@@ -370,6 +370,7 @@ class Lane:
     vertex_y: NDArray[np.float64]
     goal_s: NDArray[np.float64]
     length: float
+    grid_reach: float
 
 
 @attrs.frozen

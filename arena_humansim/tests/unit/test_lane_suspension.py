@@ -15,6 +15,7 @@ from tests.integration._helpers import build_manager
 
 PILLAR = ("pillar", (10.0, -2.0), (10.0, 2.0))
 CRATE = ("crate", (10.0, 1.6), (10.5, 1.6))
+FAR_WALL = ("far", (10.0, 40.0), (10.0, 44.0))
 LONG_TICK_S = 100.0
 
 
@@ -79,3 +80,15 @@ def test_removing_every_wall_is_not_refused_and_stops_the_lane_source(lane_manag
     response = remove_walls(lane_manager, [])
     assert response.success is True
     assert spawned(lane_manager) == 0
+
+
+def test_wall_added_far_from_the_lane_leaves_the_lane_object_untouched(lane_manager: AgentManager) -> None:
+    before = lane_manager._lane_sources["lane"].lane
+    assert before is not None
+    add_walls(lane_manager, [FAR_WALL])
+    assert lane_manager._lane_sources["lane"].lane is before
+
+
+def test_wall_added_across_the_lane_suspends_it(lane_manager: AgentManager) -> None:
+    add_walls(lane_manager, [PILLAR])
+    assert lane_manager._lane_sources["lane"].lane is None

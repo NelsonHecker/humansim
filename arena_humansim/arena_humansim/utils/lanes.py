@@ -30,6 +30,7 @@ STATION_DIVISIONS = 4
 GRID_EPS = 1e-9
 VERTEX_EPS = 1e-9
 WALL_DISTANCE_CHUNK = 4096
+RAY_CHUNK = 1_000_000
 BAND_SAMPLES = 41
 DEFAULT_AGENT_RADIUS = 0.35
 MIN_ADJACENT_RUN_WIDTH = 2.0
@@ -120,6 +121,7 @@ def build_lane(
     chord = config.chord_tolerance
     wall_radius = clearance + chord
     offsets = _offset_grid(x, y, nx, ny, segments, wall_radius, separation, chord)
+    grid_reach = float(offsets[-1])
     wall_blocked = _wall_blocked_grid(x, y, nx, ny, offsets, segments, wall_radius)
     swept_free = ~_sweep(wall_blocked, stations, sweep / 2.0)
     right, left = _hallway_edges(swept_free, offsets, stations, flow)
@@ -165,6 +167,7 @@ def build_lane(
         vertex_y=vertices[:, 1],
         length=length,
         goal_s=np.empty(0),
+        grid_reach=grid_reach,
     )
     lane = attrs.evolve(lane, goal_s=goal_corners(lane))
     check_band(lane, walls)
@@ -192,7 +195,16 @@ def goal_corners(lane: Lane, others: Sequence[Lane] | None = None) -> NDArray[np
 
 def with_goal_corners(lane: Lane, others: Sequence[Lane]) -> Lane:
     """The lane with its goal corners limited to the corners where another lane is inside the turn."""
-    return attrs.evolve(lane, goal_s=goal_corners(lane, others))
+    goals = goal_corners(lane, others)
+    return lane if np.array_equal(goals, lane.goal_s) else attrs.evolve(lane, goal_s=goals)
+
+
+def lane_affected(lane: Lane, changed: NDArray[np.float64]) -> bool:
+    """Whether a changed segment lies within the lane's grid reach of its stations."""
+    if len(changed) == 0:
+        return False
+    near = lane.grid_reach + lane.settings.clearance + lane.settings.chord_tolerance
+    return bool((_min_wall_distance(np.column_stack([lane.x, lane.y]), changed) <= near).any())
 
 
 def _vertex_cross(lane: Lane, k: int) -> float:
@@ -447,11 +459,49 @@ def _offset_grid(
     separation: float,
     chord: float,
 ) -> NDArray[np.float64]:
-    ends = segments.reshape(-1, 2)
-    lateral = np.abs((ends[None, :, 0] - x[:, None]) * nx[:, None] + (ends[None, :, 1] - y[:, None]) * ny[:, None])
-    reach = max(float(lateral.max()) + wall_radius, separation + chord)
+    reach = max(_wall_reach(x, y, nx, ny, segments) + wall_radius, separation + chord)
     count = math.ceil(reach / chord)
     return np.arange(-count, count + 1, dtype=np.float64) * chord
+
+
+def _wall_reach(
+    x: NDArray[np.float64],
+    y: NDArray[np.float64],
+    nx: NDArray[np.float64],
+    ny: NDArray[np.float64],
+    segments: NDArray[np.float64],
+) -> float:
+    """Farthest nearest-wall hit of the normal rays, or the farthest wall endpoint when a ray hits nothing."""
+    origin = np.column_stack([x, y])
+    normal = np.column_stack([nx, ny])
+    rows = max(1, RAY_CHUNK // len(segments))
+    reach = 0.0
+    open_side = False
+    for start in range(0, len(origin), rows):
+        for sign in (1.0, -1.0):
+            hit = _ray_distance(origin[start : start + rows], sign * normal[start : start + rows], segments)
+            if np.isinf(hit).any():
+                open_side = True
+            else:
+                reach = max(reach, float(hit.max()))
+    if not open_side:
+        return reach
+    ends = segments.reshape(-1, 2)
+    lateral = np.abs((ends[None, :, 0] - x[:, None]) * nx[:, None] + (ends[None, :, 1] - y[:, None]) * ny[:, None])
+    return float(lateral.max())
+
+
+def _ray_distance(origin: NDArray[np.float64], direction: NDArray[np.float64], segments: NDArray[np.float64]) -> NDArray[np.float64]:
+    a = segments[:, 0, :]
+    edge = segments[:, 1, :] - a
+    w = a[None, :, :] - origin[:, None, :]
+    d = direction[:, None, :]
+    denom = d[..., 0] * edge[None, :, 1] - d[..., 1] * edge[None, :, 0]
+    safe = np.where(np.abs(denom) > GRID_EPS, denom, 1.0)
+    t = (w[..., 0] * edge[None, :, 1] - w[..., 1] * edge[None, :, 0]) / safe
+    u = (w[..., 0] * d[..., 1] - w[..., 1] * d[..., 0]) / safe
+    hit = (np.abs(denom) > GRID_EPS) & (t >= -GRID_EPS) & (u >= -GRID_EPS) & (u <= 1.0 + GRID_EPS)
+    return np.where(hit, np.maximum(t, 0.0), np.inf).min(axis=1)
 
 
 def _wall_blocked_grid(
